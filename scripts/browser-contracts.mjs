@@ -174,7 +174,7 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
-async function registryHistoryNavigation(page, options) {
+function createRegistryHistoryFixture() {
   const records = Array.from({ length: 105 }, (_, index) => ({
     id: 'history-fixture-' + index,
     serverId: 'local',
@@ -247,6 +247,11 @@ async function registryHistoryNavigation(page, options) {
     return json({ items: matching.slice(offset, offset + limit), total: matching.length, offset, limit });
   };
 
+  return { records, urlPattern, handleRegistryRequest };
+}
+
+async function registryHistoryNavigation(page, options) {
+  const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
   try {
     await page.getByRole('tab', { name: 'History', exact: true }).click();
