@@ -6,6 +6,7 @@ const { describe, test, expect, afterAll } = require('@jest/globals');
 const originalDatabasePath = process.env.DATABASE_PATH;
 process.env.DATABASE_PATH = ':memory:';
 const { createServiceRegistry } = require('../lib/service-registry/registry');
+const { createHttpMetadataStore } = require('../lib/service-registry/http-store');
 const { createRegistryRouter } = require('./service-registry');
 const sharedDb = require('../db');
 
