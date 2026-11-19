@@ -1,0 +1,46 @@
+# Standalone fork-only Compose setup; do NOT combine with docker-compose.yml.
+# From this fork checkout: docker compose -f docker-compose.registry-fork.yml up -d --build
+# A secret is REQUIRED in the calling shell: export SESSION_SECRET="$(openssl rand -hex 32)"
+#
+# This intentionally builds the checked-out fork rather than running the
+# original project's published image. It uses a loopback-only UI, and avoids
+# SYS_ADMIN and unconfined AppArmor. Read host-proc limitations in the guide.
+name: portracker-local-fork
+services:
+  portracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: portracker:fork-local
+    restart: unless-stopped
+    pid: host
+    cap_add:
+      - SYS_PTRACE
+    ports:
+      - "127.0.0.1:4999:4999"
+    volumes:
+      - ./portracker-data:/data
+      - /proc:/host/proc:ro
+      # Optional and powerful: read-only socket bind does NOT make the Docker
+      # daemon API read-only. Prefer a restricted Docker socket proxy.
+      # - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      NODE_ENV: production
+      PORT: "4999"
+      DATABASE_PATH: /data/portracker.db
+      HOST_PROC: /host/proc
+      ENABLE_AUTH: "true"
+      SESSION_SECRET: "${SESSION_SECRET:?export_SESSION_SECRET_before_running_compose}"
+      SERVICE_REGISTRY_ENABLED: "true"
+      SERVICE_REGISTRY_SCAN_INTERVAL_MS: "30000"
+      SERVICE_REGISTRY_PROVENANCE_ENABLED: "true"
+      SERVICE_REGISTRY_DOCKER_PROVENANCE_ENABLED: "true"
+      SERVICE_REGISTRY_RECOVERY_ENABLED: "true"
+      # HTTP root probes need an explicit reachable private host gateway
+      # address in bridge mode. Keep disabled until configured.
+      SERVICE_REGISTRY_HTTP_ENABLED: "false"
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:4999/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
