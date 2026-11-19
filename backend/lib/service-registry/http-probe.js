@@ -87,6 +87,7 @@ async function requestBounded(initial, { maxBytes, timeoutMs = 2500, accept = '*
       const transport = target.protocol === 'https:' ? https : http;
       const request = transport.request(target, {
         agent: false, method: 'GET', timeout: timeoutMs,
+        signal: AbortSignal.timeout(timeoutMs),
         rejectUnauthorized: true,
         headers: {
           Accept: accept, 'User-Agent': 'Portracker-Metadata/1.0',
@@ -118,8 +119,11 @@ async function requestBounded(initial, { maxBytes, timeoutMs = 2500, accept = '*
         incoming.once('aborted', () => reject(fail('network_error')));
         incoming.once('end', () => resolve({ code, contentType: ct, bytes: Buffer.concat(chunks) }));
       });
-      request.on('error', error => reject(error.code === 'CERT_HAS_EXPIRED' ||
-        error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ? fail('tls_untrusted') : fail('network_error')));
+      request.on('error', error => reject(error.code === 'ABORT_ERR'
+        ? fail('timeout')
+        : error.code === 'CERT_HAS_EXPIRED' || error.code === 'DEPTH_ZERO_SELF_SIGNED_CERT' ||
+          error.code === 'SELF_SIGNED_CERT_IN_CHAIN' || error.code === 'ERR_TLS_CERT_ALTNAME_INVALID'
+          ? fail('tls_untrusted') : fail('network_error')));
       request.on('timeout', () => request.destroy(fail('timeout')));
       request.end();
     });
