@@ -66,6 +66,13 @@ function extractDockerProvenance(container, inspect, fingerprint = null) {
   };
 }
 
+function readDockerProvenanceConfig(env = process.env) {
+  const requested = env.SERVICE_REGISTRY_DOCKER_PROVENANCE_ENABLED === 'true';
+  const authenticated = env.ENABLE_AUTH === 'true';
+  return { enabled: requested && authenticated, requiresAuth: requested && !authenticated };
+}
+
 module.exports = {
   safeName, safePath, daemonFingerprint, extractDockerProvenance, configFilePaths,
+  readDockerProvenanceConfig,
 };
