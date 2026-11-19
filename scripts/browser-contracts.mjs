@@ -230,7 +230,7 @@ async function registryHistoryNavigation(page, options) {
       (!status || row.status === status) &&
       (!port || row.previewPort === Number(port)) &&
       (!since || row.lastSeenAt >= since)
-    );
+    ).sort((a, b) => b.lastSeenAt - a.lastSeenAt);
     const offset = Number(filters.get('offset') || 0);
     const limit = Number(filters.get('limit') || 24);
     return json({ items: matching.slice(offset, offset + limit), total: matching.length, offset, limit });
@@ -248,7 +248,7 @@ async function registryHistoryNavigation(page, options) {
       'A failed source scan must remain unknown, never appear under offline');
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByText('Page 2 of 5').waitFor();
-    await page.getByRole('button', { name: /example-service-24/ }).click();
+    await page.getByRole('button', { name: /example-service-79/ }).click();
     await page.getByText('Remembered endpoints').waitFor();
     const forget = page.getByRole('button', { name: 'Forget this history record' });
     page.once('dialog', dialog => dialog.accept());
