@@ -174,6 +174,20 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
+async function registryHistoryNavigation(page, options) {
+  await page.getByRole('tab', { name: 'History', exact: true }).click();
+  await page.getByRole('heading', { name: 'Service history' }).waitFor();
+  await page.getByRole('combobox', { name: 'Filter by status' }).selectOption('offline');
+  await page.getByRole('textbox', { name: 'Search saved service names' }).fill('example');
+  await page.getByRole('tab', { name: 'History' }).evaluate(node => {
+    if (node.getAttribute('aria-selected') !== 'true') throw new Error('History tab is not active');
+  });
+  await page.screenshot({ path: path.join(options.artifacts, options.viewport.width + '-history.png'),
+    fullPage: true, animations: 'disabled' });
+  await page.getByRole('tab', { name: 'Live ports' }).click();
+  await page.getByPlaceholder('Search ports, processes...').waitFor();
+}
+
 async function viewportContract(browser, options) {
   const context = await browser.newContext({ viewport: options.viewport, reducedMotion: 'reduce' });
   const page = await context.newPage();
@@ -197,6 +211,7 @@ async function viewportContract(browser, options) {
     await page.getByText('18080', { exact: true }).first().waitFor();
     await search.fill('');
     await memoryLabels(page, options);
+    await registryHistoryNavigation(page, options);
     await releaseNotice(page, options.noticePlan.freshVersion);
     await settings(page);
     await peerWarning(page, options);
