@@ -5,6 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import whatsNewConfig from '../frontend/src/lib/whats-new-config.js';
 import { chromium } from 'playwright';
+import { registryRecoveryFixture, applyRegistryFixtureNote } from './registry-recovery-fixture.mjs';
 
 async function assertLayout(page) {
   const dimensions = await page.evaluate(() => ({ width: window.innerWidth, content: document.documentElement.scrollWidth }));
@@ -172,33 +173,6 @@ async function remoteDiagnostics(page, options) {
   await page.evaluate(value => { if (value === null) localStorage.removeItem('portLayout'); else localStorage.setItem('portLayout', value); }, previousLayout);
   await page.goto(options.baseUrl + '/?server=local', { waitUntil: 'domcontentloaded' });
   await page.getByPlaceholder('Search ports, processes...').waitFor();
-}
-
-function registryRecoveryFixture(id, notes) {
-  const item = notes.get(id) || { text: '', version: 0, updatedAt: null };
-  const type = id === 'history-fixture-79' ? 'systemd-start' :
-    id === 'history-fixture-78' ? 'compose-up' : null;
-  const command = type === 'systemd-start'
-    ? "'systemctl' '--user' 'start' 'dev.service'"
-    : "'docker' 'compose' '-f' '/home/dev/demo/compose.yml' '-p' 'demo' 'up' '-d' 'web'";
-  return { notes: item, recipes: type ? [{
-    type, title: type === 'systemd-start' ? 'Start the observed systemd unit'
-      : 'Suggested Docker Compose recovery',
-    confidence: 'unverified', hostScope: type === 'compose-up' ? 'docker-host' : 'linux-host',
-    caveats: ['Review before running'], command,
-  }] : [] };
-}
-
-function applyRegistryFixtureNote(req, suffix, notes) {
-  const id = suffix.split('/')[1];
-  const body = req.postDataJSON();
-  const current = notes.get(id) || { text: '', version: 0 };
-  if (body.version !== current.version) {
-    return { status: 409, body: { error: 'Notes conflict' } };
-  }
-  const saved = { text: body.notes, version: current.version + 1, updatedAt: 1730000000000 };
-  notes.set(id, saved);
-  return { status: 200, body: { notes: saved } };
 }
 
 function createRegistryHistoryFixture() {
