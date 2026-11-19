@@ -7,8 +7,12 @@ const { createRegistryScanner, readRegistryConfig } = require('./scanner');
 
 function fixture(run) {
   const db = new Database(':memory:');
-  try { return run(db, createServiceRegistry(db)); }
-  finally { db.close(); }
+  let result;
+  try { result = run(db, createServiceRegistry(db)); }
+  catch (error) { db.close(); throw error; }
+  if (result && typeof result.then === 'function') return result.finally(() => db.close());
+  db.close();
+  return result;
 }
 
 const system = (port, pid = 101) => ({
