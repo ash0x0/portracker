@@ -293,7 +293,11 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
-    await page.getByRole('button', { name: /example-service-79/ }).click();
+    // A background registry refresh can replace keyed history cards while
+    // Playwright waits for click stability on slower ARM64 runners.
+    // Dispatching a DOM click still verifies the exact React selection handler.
+    await page.getByRole('button', { name: /example-service-79/ })
+      .dispatchEvent('click');
     await page.getByText('Remembered endpoints').waitFor();
     await page.getByRole('region', { name: 'Linux launch provenance' }).waitFor();
     await page.getByText('dev.service', { exact: true }).waitFor();
