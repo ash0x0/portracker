@@ -8,7 +8,10 @@ const SERVER_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.:-]{0,127}$/;
 
 function cleanLabel(value, maxLength = 120) {
   if (typeof value !== 'string') return '';
-  return value.replace(/[\x00-\x1f\x7f]/g, ' ').trim().slice(0, maxLength);
+  return Array.from(value, (character) => {
+    const code = character.codePointAt(0);
+    return code < 32 || code === 127 ? ' ' : character;
+  }).join('').trim().slice(0, maxLength);
 }
 
 function validServerId(value) {
