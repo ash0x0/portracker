@@ -30,6 +30,7 @@ function createRegistryScanner({
   schedule = setTimeout,
   cancel = clearTimeout,
   now = Date.now,
+  random = Math.random,
 }) {
   if (!registry || typeof registry.reconcileSource !== 'function') {
     throw new TypeError('A service registry with reconciliation is required');
@@ -42,7 +43,8 @@ function createRegistryScanner({
   let timer = null;
   let stopped = true;
   let running = null;
-  let failures = 0;
+  const sourceFailures = new Map();
+  const retryAfter = new Map();
 
   async function runOnce() {
     if (running) return running;
@@ -50,6 +52,7 @@ function createRegistryScanner({
       const results = [];
       for (const source of sources) {
         const at = now();
+        if (at < (retryAfter.get(source.name) || 0)) continue;
         try {
           const snapshot = await source.capture();
           if (!snapshot || snapshot.source !== source.name ||
@@ -65,6 +68,8 @@ function createRegistryScanner({
             errorCode: snapshot.complete ? null : 'untrusted_scan_scope',
           });
           results.push(result);
+          sourceFailures.set(source.name, 0);
+          retryAfter.delete(source.name);
         } catch {
           // Don't include raw collector errors; Docker or proc failures may
           // contain private filesystem paths and connection information.
@@ -78,10 +83,11 @@ function createRegistryScanner({
             errorCode: 'collector_unavailable',
           });
           results.push({ source: source.name, outcome: 'failed', count: 0, at });
+          const failures = Math.min((sourceFailures.get(source.name) || 0) + 1, 5);
+          sourceFailures.set(source.name, failures);
+          retryAfter.set(source.name, at + Math.min(intervalMs * Math.pow(2, failures), 3600000));
         }
       }
-      failures = results.every(result => result.outcome === 'complete') ? 0
-        : Math.min(failures + 1, 5);
       return results;
     })();
     running = job;
@@ -95,7 +101,7 @@ function createRegistryScanner({
       timer = null;
       try { await runOnce(); }
       catch { logger.warn('Service registry scan cycle failed'); }
-      if (!stopped) queue(Math.min(intervalMs * Math.pow(2, failures), 3600000));
+      if (!stopped) queue(intervalMs + Math.floor(intervalMs * 0.05 * random()));
     }, delay);
     timer?.unref?.();
   }
