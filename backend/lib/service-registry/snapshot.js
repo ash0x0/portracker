@@ -21,12 +21,19 @@ function trustedHostProcRoot() {
  * A container's own network namespace is NOT an authoritative scan of its
  * host even when it can see some PIDs. Host /proc must be explicitly mounted.
  */
+function readBootId() {
+  try {
+    return fs.readFileSync('/proc/sys/kernel/random/boot_id', 'utf8').trim();
+  } catch { return null; }
+}
+
 async function captureHostTcp({
   parser = new ProcParser(),
   dockerized = isDockerized(),
   hostProcTrusted = trustedHostProcRoot(),
 } = {}) {
   const rows = await parser.getTcpPorts({ strict: true });
+  const bootId = readBootId();
   if (!Array.isArray(rows) || rows.some(row => !row || row.error)) {
     throw new Error('System TCP snapshot returned invalid rows');
   }
@@ -40,6 +47,7 @@ async function captureHostTcp({
       host_port: row.host_port,
       owner: row.owner || 'unknown',
       pid: row.pid || null,
+      boot_id: bootId,
       internal: false,
     })),
   };
