@@ -91,7 +91,7 @@ function normalizeObservation(value, serverId = 'local') {
     identityConfidence = 'verified';
   } else if (source === 'docker' && containerId) {
     identityKey = hashedIdentity('docker-container:' +
-      (dockerHostHash || 'unknown-daemon') + ':' + containerId);
+      (dockerHostHash ? dockerHostHash + ':' : '') + containerId);
     identityConfidence = 'provisional';
   } else if (pid !== null) {
     // Only an observation episode, never a verified identity across host boots.
