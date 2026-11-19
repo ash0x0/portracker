@@ -8,6 +8,41 @@
 
 After any service listens on a local port, Portracker should **automatically discover it, remember it permanently, and make it recoverable**. For HTTP services it should capture the actual browser tab title and favicon; for services with identifiable ownership it should save the process manager, original project location, and a **read-only** restart recipe. When the service exits, disappears, or the machine reboots, its entry remains visible with a meaningful status.
 
+## Audited implementation context (fork `main`, v1.3.18)
+
+| Concern | Existing implementation | Design consequence |
+| --- | --- | --- |
+| Main scan routes | `backend/index.js`: `/api/ports`, `/api/servers/:id/scan`, `getLocalPortsUsingCollectors()` | Integrate before the `/api/ports` address/port/protocol merge so ownership isn't lost |
+| Collector contracts | `backend/collectors/index.js`, `base_collector.js`, `docker_collector.js`, `system_collector.js`, `truenas_collector.js` | Normalize successful/partial/error snapshots; some collectors return error-shaped entries instead of throwing |
+| Host process discovery | `backend/lib/proc-parser.js`: `/proc/net/tcp*` + inode/PID mapping | Capture cwd/systemd attribution **while alive**; PID and container ID aren't durable identities |
+| Docker enrichment | `backend/lib/docker/compose-attribution.js` and `backend/lib/docker-api.js` | Reuse inspect/labels and cache; Compose project/service are stronger identity signals than transient container IDs |
+| Existing persistence | `backend/db.js`: SQLite tables for `servers`, `notes`, `custom_service_names`, `ignores`; `settings-manager.js` | Introduce new historical tables via isolated idempotent migration; old per-port notes aren't unique app identities |
+| Health vs liveness | `backend/routes/services.js`, `backend/lib/health/` | Listener disappearance, failed HTTP health checks, and collector outages need **different statuses** |
+| HTTP guardrail | `backend/lib/ping-policy.js` and `backend/lib/autoxpose-http.js` | Reuse pinned DNS and bounded request patterns; HTML/favicon fetches need separate validated path/redirect handling |
+| Frontend | `App.jsx`, `ServerSection.jsx`, `AppSidebarLayout.jsx`, `DashboardLayout.jsx`, `ServiceIcon.jsx` | Add isolated history view/API hook; don't bloat App.jsx. Existing icon lookup uses Homarr/selfhst CDN, **not application favicons** |
+| Access controls | `backend/middleware/auth.js` (optional session/API key), `diagnostic-data.js` | Separate authenticated history reads and session-only writes; scrub raw provenance |
+| Tests / release | Root Jest, Node frontend tests, `scripts/browser-contracts.mjs`, `scripts/image-contracts.mjs`, `.github/workflows/docker-publish.yml` | Each PR has scoped tests; integration issue tests NixOS/containers and protects against accidental publishing |
+| Deployment | `docker-compose.yml`, Dockerfile; host PID, Docker socket, optional `HOST_PROC` | A host localhost port may not be reachable from inside container; paths/namespaces can limit provenance |
+
+In particular, **never mark all services offline because a collector returned an empty or error/partial snapshot**, and **never use the host:port alone as a service ID**. The current UI refresh cycle is browser-driven, so registry polling must be backend lifecycle-owned to discover services when the browser is closed.
+
+## Linked work items
+
+**Epic:** [#2](https://github.com/ash0x0/portracker/issues/2). **Roadmap PR:** [#1](https://github.com/ash0x0/portracker/pull/1).
+
+| Order | Reviewable issue / proposed PR | Prerequisites |
+| --- | --- | --- |
+| 1 | [#3 — Storage and historical identities](https://github.com/ash0x0/portracker/issues/3) | none |
+| 2 | [#4 — Autonomous scanner and state reconciliation](https://github.com/ash0x0/portracker/issues/4) | #3 |
+| 3 | [#5 — Searchable offline/history UI](https://github.com/ash0x0/portracker/issues/5) | #3, #4 |
+| 4 | [#6 — HTTP title/favicon/URL capture](https://github.com/ash0x0/portracker/issues/6) | #3, #4 |
+| 5 | [#7 — Linux process and systemd provenance](https://github.com/ash0x0/portracker/issues/7) | #3, #4 |
+| 6 | [#8 — Docker and Compose provenance](https://github.com/ash0x0/portracker/issues/8) | #3, #4 |
+| 7 | [#9 — Read-only recovery recipes](https://github.com/ash0x0/portracker/issues/9) | #3, #5, #7, #8 |
+| 8 | [#10 — NixOS acceptance, security, docs](https://github.com/ash0x0/portracker/issues/10) | #3–#9 |
+
+Each issue includes feature scope, likely files, data model or algorithm, explicit non-goals, and acceptance tests. Issues #5, #6, #7 and #8 can be developed independently **after the shared registry/scanner foundations**, but dependent PRs should target the fork's `main` after their prerequisites merge.
+
 ## Architectural principles
 
 - Separate **live observations** (the current port scan) from **historical identities** (an enduring catalog). An endpoint/port is not an application identity.
