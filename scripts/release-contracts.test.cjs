@@ -31,11 +31,11 @@ test('fork validation never authenticates to or publishes to a container registr
     assert(!source.includes(prohibited), 'Unexpected publish capability: ' + prohibited);
   }
   const builds = steps.filter(step => step.uses?.startsWith('docker/build-push-action@'));
-  assert.equal(builds.length, 2);
-  for (const build of builds) {
-    assert.equal(build.with.push, false);
-    assert.equal(build.with.load, true);
-  }
+  assert.equal(builds.length, 1);
+  assert.equal(builds[0].with.push, false);
+  assert.equal(builds[0].with.load, true);
+  assert.equal(builds[0].with.platforms, 'linux/${{ matrix.arch }}');
+  assert.equal(builds[0].with.tags, '${{ matrix.image }}');
 });
 
 test('lint, all unit tests and both Docker platform contracts are retained', () => {
@@ -48,13 +48,13 @@ test('lint, all unit tests and both Docker platform contracts are retained', () 
     assert(checks.includes(command));
   }
   assert.equal(find('Verify Docker build context').run.trim(), 'npm run test:context');
-  assert.equal(find('Build AMD64 test image locally').with.platforms, 'linux/amd64');
-  assert.equal(find('Build AMD64 test image locally').with.tags, 'portracker:ci');
-  assert.equal(find('Build ARM64 test image locally').with.platforms, 'linux/arm64');
-  assert.equal(find('Build ARM64 test image locally').with.tags, 'portracker:ci-arm64');
-  const contracts = find('Run Docker image contracts on both architectures').run;
-  assert(contracts.includes('for architecture in amd64 arm64'));
-  assert(contracts.includes('npm run test:image -- "$test_image" "linux/$architecture"'));
+  assert.deepEqual(workflow.jobs.validate.strategy.matrix.include, [
+    { arch: 'amd64', runner: 'ubuntu-latest', image: 'portracker:ci' },
+    { arch: 'arm64', runner: 'ubuntu-24.04-arm', image: 'portracker:ci-arm64' },
+  ]);
+  assert.equal(workflow.jobs.validate['runs-on'], '${{ matrix.runner }}');
+  const contracts = find('Run native Docker image contracts').run;
+  assert(contracts.includes('npm run test:image -- "$TEST_IMAGE" "linux/$TARGET_ARCH"'));
   const evidence = find('Retain regression evidence');
   assert.equal(evidence.if, 'always()');
   assert.equal(evidence.with['if-no-files-found'], 'warn');
