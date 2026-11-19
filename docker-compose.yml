@@ -88,6 +88,8 @@ services:
       # - SERVICE_REGISTRY_PROVENANCE_ENABLED=true
       # Optional full read-only Docker/Compose provenance. Requires ENABLE_AUTH=true.
       # - SERVICE_REGISTRY_DOCKER_PROVENANCE_ENABLED=true
+      # Optional copy-only recovery hints and versioned user notes; requires auth.
+      # - SERVICE_REGISTRY_RECOVERY_ENABLED=true
       # Inside Docker explicitly set a vetted, reachable host gateway IP.
       # Do not use 127.0.0.1 to target the host from a bridge container.
       # - SERVICE_REGISTRY_HTTP_HOST=172.17.0.1
