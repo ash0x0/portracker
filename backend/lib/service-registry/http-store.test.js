@@ -118,6 +118,7 @@ describe('persistent HTTP metadata and icon cache', () => {
 
   test('only genuine TCP endpoints are considered for enrichment', () => fixture((db, registry, store) => {
     observe(registry, { pid: 1 });
+    const nonWeb = observe(registry, { pid: 2, port: 5432 });
     const id = 'internal-example';
     const now = Date.now();
     db.prepare('INSERT INTO registry_services ' +
@@ -129,5 +130,6 @@ describe('persistent HTTP metadata and icon cache', () => {
       "VALUES ('int-endpoint', ?, '127.0.0.1', 9000, 'tcp', 1, 'docker', ?, ?)")
       .run(id, now, now);
     expect(store.getCandidates({ at: 2000 }).map(row => row.service_id)).not.toContain(id);
+    expect(store.getCandidates({ at: 2000 }).map(row => row.service_id)).not.toContain(nonWeb.id);
   }));
 });
