@@ -174,6 +174,21 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
+function registryRecoveryFixture(id, notes) {
+  const item = notes.get(id) || { text: '', version: 0, updatedAt: null };
+  const type = id === 'history-fixture-79' ? 'systemd-start' :
+    id === 'history-fixture-78' ? 'compose-up' : null;
+  const command = type === 'systemd-start'
+    ? "'systemctl' '--user' 'start' 'dev.service'"
+    : "'docker' 'compose' '-f' '/home/dev/demo/compose.yml' '-p' 'demo' 'up' '-d' 'web'";
+  return { notes: item, recipes: type ? [{
+    type, title: type === 'systemd-start' ? 'Start the observed systemd unit'
+      : 'Suggested Docker Compose recovery',
+    confidence: 'unverified', hostScope: type === 'compose-up' ? 'docker-host' : 'linux-host',
+    caveats: ['Review before running'], command,
+  }] : [] };
+}
+
 function createRegistryHistoryFixture() {
   const records = Array.from({ length: 105 }, (_, index) => ({
     id: 'history-fixture-' + index,
@@ -193,6 +208,7 @@ function createRegistryHistoryFixture() {
     iconHash: index === 79 ? 'a'.repeat(64) : null,
     metadataFetchedAt: index === 79 ? 1730000000000 : null,
   }));
+  const recoveryNotes = new Map();
   const urlPattern = '**/api/service-registry**';
   const handleRegistryRequest = async route => {
     const req = route.request();
@@ -216,6 +232,15 @@ function createRegistryHistoryFixture() {
         { source: 'docker', outcome: 'failed', lastSuccessAt: 1729990000000 },
       ] });
     }
+    if (req.method() === 'PUT' && suffix.endsWith('/recovery-notes')) {
+      const id = suffix.split('/')[1];
+      const body = req.postDataJSON();
+      const old = recoveryNotes.get(id) || { text: '', version: 0 };
+      if (body.version !== old.version) return json({ error: 'Notes conflict' }, 409);
+      const saved = { text: body.notes, version: old.version + 1, updatedAt: 1730000000000 };
+      recoveryNotes.set(id, saved);
+      return json({ notes: saved });
+    }
     if (suffix && suffix !== '/') {
       const id = decodeURIComponent(suffix.slice(1));
       const item = records.find(row => row.id === id);
@@ -224,7 +249,8 @@ function createRegistryHistoryFixture() {
         records.splice(records.indexOf(item), 1);
         return route.fulfill({ status: 204, body: '' });
       }
-      return json({ ...item, dockerProvenance: id === 'history-fixture-78' ? {
+      return json({ ...item, recovery: registryRecoveryFixture(id, recoveryNotes),
+        dockerProvenance: id === 'history-fixture-78' ? {
         composeProject: 'demo', composeService: 'web',
         containerName: 'demo-web-1', image: 'nginx:stable',
         networkMode: 'bridge', hostFingerprint: 'a'.repeat(64),
@@ -281,10 +307,16 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('button', { name: /example-service-78/ }).click();
     await page.getByRole('region', { name: 'Docker launch provenance' }).waitFor();
     await page.getByText('nginx:stable', { exact: true }).waitFor();
+    await page.getByRole('region', { name: 'Recovery information' }).waitFor();
+    await page.getByText('Suggested Docker Compose recovery').waitFor();
+    await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
+    await page.getByRole('button', { name: 'Save notes' }).click();
+    await page.getByText('Recovery notes saved.').waitFor();
     await page.getByRole('button', { name: /example-service-79/ }).click();
     await page.getByText('Remembered endpoints').waitFor();
     await page.getByRole('region', { name: 'Linux launch provenance' }).waitFor();
     await page.getByText('dev.service', { exact: true }).waitFor();
+    await page.getByText('Start the observed systemd unit').waitFor();
     await page.getByText('Verified Local Root', { exact: true }).first().waitFor();
     await page.locator('img[src="/api/service-registry/icons/' + 'a'.repeat(64) + '"]').first().waitFor();
     const forget = page.getByRole('button', { name: 'Forget this history record' });
