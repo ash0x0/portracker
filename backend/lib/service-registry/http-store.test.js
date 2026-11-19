@@ -1,6 +1,9 @@
 'use strict';
 
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { describe, expect, test } = require('@jest/globals');
 const { createServiceRegistry } = require('./registry');
 const { createHttpMetadataStore, iconMime, verifiedRootUrl } = require('./http-store');
@@ -48,6 +51,30 @@ describe('persistent HTTP metadata and icon cache', () => {
     expect(registry.getService(original.id).displayName).toBe('node');
     expect(db.prepare('SELECT COUNT(*) AS n FROM registry_icons').get().n).toBe(1);
   }));
+
+  test('title and favicon survive file-backed SQLite close and reopen', () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'registry-http-'));
+    const file = path.join(dir, 'registry.db');
+    try {
+      const firstDb = new Database(file);
+      const registry = createServiceRegistry(firstDb);
+      const original = observe(registry);
+      const firstStore = createHttpMetadataStore(firstDb);
+      const saved = firstStore.recordSuccess(original.id, {
+        title: 'Persistent Web App', rootUrl: 'http://127.0.0.1:3000/',
+        iconBytes: PNG, iconType: 'image/png',
+      }, 2000);
+      firstDb.close();
+
+      const reopened = new Database(file);
+      try {
+        createServiceRegistry(reopened);
+        const store = createHttpMetadataStore(reopened);
+        expect(store.getMetadata(original.id).httpTitle).toBe('Persistent Web App');
+        expect(store.getIcon(saved.iconHash).bytes.equals(PNG)).toBe(true);
+      } finally { reopened.close(); }
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
 
   test('failure preserves last good title, icon, and successful timestamp', () => fixture((_db, registry, store) => {
     const entry = observe(registry);
