@@ -39,6 +39,12 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         Commands below are historical suggestions to copy and review.
         Portracker does not execute, start, or stop services.
       </p>
+      {saved.text && (
+        <div className="rounded-md border border-indigo-200 dark:border-indigo-800 p-3">
+          <p className="text-xs font-medium">My saved instructions (preferred)</p>
+          <pre className="text-sm whitespace-pre-wrap break-all font-sans">{saved.text}</pre>
+        </div>
+      )}
       {!recovery.recipes?.length && (
         <p className="text-sm text-slate-500">
           No safe automatic startup command can be inferred from the available evidence.
