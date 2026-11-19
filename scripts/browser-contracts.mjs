@@ -189,6 +189,18 @@ function registryRecoveryFixture(id, notes) {
   }] : [] };
 }
 
+function applyRegistryFixtureNote(req, suffix, notes) {
+  const id = suffix.split('/')[1];
+  const body = req.postDataJSON();
+  const current = notes.get(id) || { text: '', version: 0 };
+  if (body.version !== current.version) {
+    return { status: 409, body: { error: 'Notes conflict' } };
+  }
+  const saved = { text: body.notes, version: current.version + 1, updatedAt: 1730000000000 };
+  notes.set(id, saved);
+  return { status: 200, body: { notes: saved } };
+}
+
 function createRegistryHistoryFixture() {
   const records = Array.from({ length: 105 }, (_, index) => ({
     id: 'history-fixture-' + index,
@@ -233,13 +245,8 @@ function createRegistryHistoryFixture() {
       ] });
     }
     if (req.method() === 'PUT' && suffix.endsWith('/recovery-notes')) {
-      const id = suffix.split('/')[1];
-      const body = req.postDataJSON();
-      const old = recoveryNotes.get(id) || { text: '', version: 0 };
-      if (body.version !== old.version) return json({ error: 'Notes conflict' }, 409);
-      const saved = { text: body.notes, version: old.version + 1, updatedAt: 1730000000000 };
-      recoveryNotes.set(id, saved);
-      return json({ notes: saved });
+      const result = applyRegistryFixtureNote(req, suffix, recoveryNotes);
+      return json(result.body, result.status);
     }
     if (suffix && suffix !== '/') {
       const id = decodeURIComponent(suffix.slice(1));
