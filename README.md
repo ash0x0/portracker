@@ -38,6 +38,32 @@ By auto-discovering services on your systems, portracker provides a live, accura
 
 <sub>\*_Note: VMs discovered on TrueNAS with the optional API key are shown in read-only mode. To enable full monitoring, deploy a portracker instance on each VM and add it as a separate server._</sub>
 
+## Fork-only localhost history on Linux / NixOS
+
+This fork adds opt-in, durable **History** for automatically discovered
+localhost TCP listeners: remembered offline services, actual HTTP root
+titles/favicons, authenticated Linux/systemd and Docker Compose provenance,
+and copy-only recovery instructions with personal notes.
+
+**Use the fork's code, not the upstream published image.** For a local
+test run with authenticated, loopback-only UI and a locally built image:
+
+```sh
+export SESSION_SECRET="$(openssl rand -hex 32)"
+docker compose -f docker-compose.registry-fork.yml up --build -d
+```
+
+The default docker-compose.yml is still an upstream-image example and
+**does not** install these fork features. The fork-specific Compose setup
+is intentionally separate and leaves Docker socket access and HTTP
+metadata probing disabled until explicitly configured.
+
+See [NixOS setup, backups, security and manual acceptance checks](docs/service-registry-nixos.md).
+Real NixOS process-visibility and host/network namespace behavior
+must be verified on your desktop; portable Linux CI is not a substitute.
+
+---
+
 ## Deployment
 
 Deployment is designed to be simple using Docker.
