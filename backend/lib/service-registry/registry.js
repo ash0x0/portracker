@@ -176,6 +176,11 @@ function createServiceRegistry(db) {
       clauses.push("s.display_name LIKE ? ESCAPE '\\'");
       params.push('%' + term + '%');
     }
+    if (filters.seenSince !== undefined) {
+      const since = boundedInteger(filters.seenSince, 'seenSince', 0, 8640000000000000);
+      clauses.push('s.last_seen_at >= ?');
+      params.push(since);
+    }
     if (filters.port !== undefined) {
       const port = normalizePort(filters.port);
       clauses.push('EXISTS (SELECT 1 FROM registry_endpoints e ' +
