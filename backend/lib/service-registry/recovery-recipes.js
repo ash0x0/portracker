@@ -48,16 +48,19 @@ function systemdRecipes(linux) {
   ];
 }
 
+function safeRecipePath(value) {
+  return typeof value === 'string' && path.isAbsolute(value) && value.length <= 1024 &&
+    !Array.from(value).some(ch => ch.codePointAt(0) < 32 || ch.codePointAt(0) === 127);
+}
+
 function composeRecipes(docker) {
   if (!docker || !COMPOSE.test(docker.composeProject || '') ||
       !COMPOSE.test(docker.composeService || '') ||
       !Array.isArray(docker.configFilePaths) ||
       !docker.configFilePaths.length || docker.configFilePaths.length > 8 ||
-      !docker.configFilePaths.every(file => typeof file === 'string' &&
-        path.isAbsolute(file) && file.length <= 1024)) return [];
+      !docker.configFilePaths.every(safeRecipePath)) return [];
   const argv = ['docker', 'compose'];
-  if (typeof docker.projectWorkingDir === 'string' &&
-      path.isAbsolute(docker.projectWorkingDir) && docker.projectWorkingDir.length <= 1024) {
+  if (safeRecipePath(docker.projectWorkingDir)) {
     argv.push('--project-directory', docker.projectWorkingDir);
   }
   for (const file of docker.configFilePaths) argv.push('-f', file);
