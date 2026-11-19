@@ -17,7 +17,7 @@ test('fork no longer includes an automatic release tag workflow', () => {
   assert.match(workflowSource, /^\s*on:\s*$/m);
   assert.match(workflowSource, /^\s+pull_request:\s*$/m);
   assert.match(workflowSource, /^\s+push:\s*$/m);
-  assert.doesNotMatch(workflowSource, /^  (tags|workflow_dispatch):/m);
+  assert.doesNotMatch(workflowSource, /^ {2}(tags|workflow_dispatch):/m);
 });
 
 test('fork validation never authenticates to or publishes to a container registry', () => {
