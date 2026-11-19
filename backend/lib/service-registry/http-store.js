@@ -35,14 +35,22 @@ function verifiedRootUrl(value) {
 }
 
 function createHttpMetadataStore(db) {
+  // Conservative best-effort web classification avoids sending HTTP GETs to
+  // obvious SSH/database/message-queue ports while covering normal dev UIs.
+  const likelyWeb = alias =>
+    '(' + alias + '.host_port IN (80,81,443,800,8080,8081,8443,8888,9090,9443,10000,54321) ' +
+    'OR ' + alias + '.host_port BETWEEN 3000 AND 5999 ' +
+    'OR ' + alias + '.host_port BETWEEN 8000 AND 9999) ' +
+    'AND ' + alias + '.host_port NOT IN (3306,5432,5433,5672,6379,9092)';
   const candidates = db.prepare(
     'SELECT s.id AS service_id, ' +
     '(SELECT e.host_port FROM registry_endpoints e WHERE e.service_id = s.id ' +
-    "AND e.protocol = 'tcp' AND e.internal = 0 ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS host_port " +
+    "AND e.protocol = 'tcp' AND e.internal = 0 AND " + likelyWeb('e') +
+    ' ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS host_port ' +
     'FROM registry_services s LEFT JOIN registry_http_metadata m ON m.service_id = s.id ' +
     "WHERE s.server_id = 'local' AND s.status = 'listening' AND " +
     "EXISTS (SELECT 1 FROM registry_endpoints ep WHERE ep.service_id = s.id " +
-    "AND ep.protocol = 'tcp' AND ep.internal = 0) AND " +
+    "AND ep.protocol = 'tcp' AND ep.internal = 0 AND " + likelyWeb('ep') + ') AND ' +
     '(m.last_attempt_at IS NULL OR m.last_attempt_at <= ?) AND ' +
     '(m.fetched_at IS NULL OR m.fetched_at <= ?) ' +
     'ORDER BY s.last_seen_at DESC, s.id LIMIT ?'
