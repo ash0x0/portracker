@@ -1,193 +1,74 @@
-name: Build and Publish Docker Image
+name: Validate Portracker (fork, no publishing)
 
+# This fork is for development and PR review. All Docker builds are local to CI.
+# There are deliberately no tag, release, registry login, or image-push steps.
 on:
   push:
-    branches: [ "main" ]
-    tags: [ "v*.*.*" ]
+    branches: [main]
   pull_request:
-    branches: [ "main" ]
-  workflow_dispatch:
-    inputs:
-      release_tag:
-        description: Existing version tag to publish
-        required: true
-        type: string
-      expected_sha:
-        description: Exact commit SHA already referenced by the tag
-        required: true
-        type: string
+    branches: [main]
+
+permissions:
+  contents: read
 
 concurrency:
-  group: docker-${{ github.event_name == 'pull_request' && format('pr-{0}', github.event.pull_request.number) || format('{0}-{1}', github.event_name == 'workflow_dispatch' && 'tag' || github.ref_type, inputs.release_tag || github.ref_name) }}
-  cancel-in-progress: false
-
-env:
-  IMAGE_NAME: portracker
+  group: validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-push:
+  validate:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    permissions:
-      contents: write
-
     steps:
-      - name: Validate recovery request
-        if: github.event_name == 'workflow_dispatch'
-        env:
-          WORKFLOW_REF: ${{ github.ref }}
-          RELEASE_TAG: ${{ inputs.release_tag }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: |
-          node <<'NODE'
-          const assert = require('node:assert/strict');
-          assert.equal(process.env.WORKFLOW_REF, 'refs/heads/main', 'Run recovery from main');
-          assert.match(process.env.RELEASE_TAG, /^v\d+\.\d+\.\d+$/, 'An existing version tag is required');
-          assert.match(process.env.EXPECTED_SHA, /^[0-9a-f]{40}$/, 'An exact commit SHA is required');
-          NODE
-
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-          ref: ${{ inputs.release_tag || github.ref }}
 
       - name: Set up Node.js
         uses: actions/setup-node@v5
         with:
-          node-version: '22'
+          node-version: "22"
           cache: npm
 
-      - name: Verify release source
-        id: source
-        env:
-          EVENT_NAME: ${{ github.event_name }}
-          REF_NAME: ${{ inputs.release_tag || github.ref_name }}
-          REF_TYPE: ${{ github.event_name == 'workflow_dispatch' && 'tag' || github.ref_type }}
-          EXPECTED_SHA: ${{ inputs.expected_sha }}
-        run: |
-          node <<'NODE'
-          const assert = require('node:assert/strict');
-          const { execFileSync } = require('node:child_process');
-          const { appendFileSync, readFileSync } = require('node:fs');
-          const git = (args) => execFileSync('git', args, { encoding: 'utf8' }).trim();
-          const sha = git(['rev-parse', 'HEAD']);
-          appendFileSync(process.env.GITHUB_OUTPUT, `sha=${sha}\n`);
-          if (process.env.REF_TYPE !== 'tag') process.exit(0);
-          assert.match(process.env.REF_NAME, /^v\d+\.\d+\.\d+$/);
-          assert.equal(git(['rev-parse', `refs/tags/${process.env.REF_NAME}^{commit}`]), sha, 'Checkout must match the tag');
-          assert.equal(JSON.parse(readFileSync('package.json', 'utf8')).version, process.env.REF_NAME.slice(1), 'Version must match the tag');
-          if (process.env.EVENT_NAME === 'workflow_dispatch') {
-            assert.equal(sha, process.env.EXPECTED_SHA, 'Tag does not match the approved commit');
-          }
-          NODE
-
-      - name: Validate source
+      - name: Install dependencies
         run: |
           npm ci
           npm ci --prefix backend
           npm ci --prefix frontend
+
+      - name: Lint and unit tests
+        run: |
           npm run lint
           npm test -- --runInBand
           npm run test:release
           npm run test:frontend
-          npx playwright install --with-deps chromium
 
-      - name: Set up CPU emulation
+      - name: Install Playwright Chromium for browser contracts
+        run: npx playwright install --with-deps chromium
+
+      - name: Verify Docker build context
+        run: npm run test:context
+
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v4
         with:
           platforms: arm64
 
-      - name: Determine release metadata
-        id: release
-        env:
-          REF_NAME: ${{ inputs.release_tag || github.ref_name }}
-          REF_TYPE: ${{ github.event_name == 'workflow_dispatch' && 'tag' || github.ref_type }}
-        run: |
-          node <<'NODE'
-          const { execFileSync } = require('node:child_process');
-          const { appendFileSync } = require('node:fs');
-
-          const output = process.env.GITHUB_OUTPUT;
-          if (process.env.REF_TYPE !== 'tag' || !/^v\d+\.\d+\.\d+$/.test(process.env.REF_NAME)) {
-            appendFileSync(output, 'is_release=false\nis_latest=false\n');
-            process.exit(0);
-          }
-
-          const current = process.env.REF_NAME.slice(1);
-          const parse = (version) => version.split('.').map(Number);
-          const compare = (left, right) => {
-            const a = parse(left);
-            const b = parse(right);
-            for (let index = 0; index < 3; index += 1) {
-              if (a[index] !== b[index]) return a[index] - b[index];
-            }
-            return 0;
-          };
-          const versions = execFileSync(
-            'git',
-            ['ls-remote', '--tags', '--refs', 'origin', 'v*'],
-            { encoding: 'utf8' }
-          )
-            .trim()
-            .split('\n')
-            .map((line) => line.split('\t')[1] || '')
-            .map((ref) => ref.replace('refs/tags/v', ''))
-            .filter((version) => /^\d+\.\d+\.\d+$/.test(version));
-          if (!versions.includes(current)) versions.push(current);
-          versions
-            .sort(compare);
-          const lower = versions.filter((version) => compare(version, current) < 0);
-          const highest = versions.at(-1) || current;
-          const previous = lower.at(-1) || '';
-
-          appendFileSync(output, `is_release=true\nis_latest=${current === highest}\ntag=${process.env.REF_NAME}\nversion=${current}\nprevious_version=${previous}\n`);
-          NODE
-
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      - name: Verify build context isolation
-        run: npm run test:context
-
-      - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v4
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - name: Extract metadata (tags, labels) for Docker
-        id: meta
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ github.event_name == 'pull_request' && env.IMAGE_NAME || format('{0}/{1}', secrets.DOCKERHUB_USERNAME, env.IMAGE_NAME) }}
-          tags: |
-            type=raw,value=ci,enable=${{ github.event_name == 'pull_request' }}
-            type=ref,event=branch,enable=${{ github.event_name != 'workflow_dispatch' }}
-            type=semver,pattern={{version}},value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_release == 'true' }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ steps.release.outputs.version }},enable=${{ steps.release.outputs.is_latest == 'true' }}
-            type=raw,value=latest,enable=${{ steps.release.outputs.is_latest == 'true' }}
-          labels: |
-            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
-
-      - name: Build pull request image
-        if: github.event_name == 'pull_request'
-        id: build_pr
+      - name: Build AMD64 test image locally
         uses: docker/build-push-action@v7
         with:
           context: .
           file: ./Dockerfile
           push: false
           load: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: portracker:ci
+          platforms: linux/amd64
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64
 
-      - name: Build ARM64 pull request image
-        if: github.event_name == 'pull_request'
+      - name: Build ARM64 test image locally
         uses: docker/build-push-action@v7
         with:
           context: .
@@ -195,42 +76,23 @@ jobs:
           push: false
           load: true
           tags: portracker:ci-arm64
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
           platforms: linux/arm64
-
-      - name: Build and push Docker candidate
-        if: github.event_name != 'pull_request'
-        id: build_publish
-        uses: docker/build-push-action@v7
-        with:
-          context: .
-          file: ./Dockerfile
-          outputs: type=image,name=${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true
-          labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
 
-      - name: Test Docker image
-        env:
-          REGISTRY_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          IMAGE_DIGEST: ${{ github.event_name == 'pull_request' && steps.build_pr.outputs.digest || steps.build_publish.outputs.digest }}
-          EVENT_NAME: ${{ github.event_name }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
+      - name: Run Docker image contracts on both architectures
+        shell: bash
         run: |
           set -euo pipefail
           for architecture in amd64 arm64; do
-            if [ "$EVENT_NAME" = "pull_request" ]; then
-              TEST_IMAGE="portracker:ci"
-              [ "$architecture" != arm64 ] || TEST_IMAGE="portracker:ci-arm64"
+            if [ "$architecture" = arm64 ]; then
+              test_image="portracker:ci-arm64"
             else
-              TEST_IMAGE="${REGISTRY_IMAGE}@${IMAGE_DIGEST}"
+              test_image="portracker:ci"
             fi
             export CONTRACT_ARTIFACTS="test-results/$architecture"
             mkdir -p "$CONTRACT_ARTIFACTS"
-            npm run test:image -- "$TEST_IMAGE" "linux/$architecture" 2>&1 | tee "$CONTRACT_ARTIFACTS/checks.log"
+            npm run test:image -- "$test_image" "linux/$architecture" 2>&1 | tee "$CONTRACT_ARTIFACTS/checks.log"
           done
 
       - name: Retain regression evidence
@@ -240,55 +102,4 @@ jobs:
           name: image-contracts-${{ github.run_id }}-${{ github.run_attempt }}
           path: test-results/
           retention-days: 14
-          if-no-files-found: error
-
-      - name: Generate release notes
-        if: steps.release.outputs.is_release == 'true'
-        run: |
-          node scripts/generate-release-notes.mjs \
-            "${{ steps.release.outputs.version }}" \
-            "${{ steps.release.outputs.previous_version }}" \
-            > release-notes.md
-          test -s release-notes.md
-
-      - name: Publish verified Docker tags
-        if: github.event_name != 'pull_request'
-        env:
-          REGISTRY_IMAGE: ${{ secrets.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}
-          IMAGE_DIGEST: ${{ steps.build_publish.outputs.digest }}
-          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-          SOURCE_SHA: ${{ steps.source.outputs.sha }}
-        run: |
-          if [ -n "$RELEASE_TAG" ]; then
-            node <<'NODE'
-          const assert = require('node:assert/strict');
-          const { execFileSync } = require('node:child_process');
-          const ref = `refs/tags/${process.env.RELEASE_TAG}`;
-          const refs = Object.fromEntries(execFileSync('git', ['ls-remote', '--tags', 'origin', ref, `${ref}^{}`], { encoding: 'utf8' }).trim().split('\n').filter(Boolean).map((line) => {
-            const [sha, name] = line.split('\t');
-            return [name, sha];
-          }));
-          assert.equal(refs[`${ref}^{}`] || refs[ref], process.env.SOURCE_SHA, 'Remote tag changed during the build');
-          NODE
-          fi
-
-          TAG_ARGS=()
-          while IFS= read -r tag; do
-            [ -n "$tag" ] && TAG_ARGS+=(--tag "$tag")
-          done <<< "$IMAGE_TAGS"
-          [ "${#TAG_ARGS[@]}" -gt 0 ]
-          docker buildx imagetools create "${TAG_ARGS[@]}" "${REGISTRY_IMAGE}@${IMAGE_DIGEST}"
-          while IFS= read -r tag; do
-            [ -z "$tag" ] || docker buildx imagetools inspect "$tag" >/dev/null
-          done <<< "$IMAGE_TAGS"
-
-      - name: Create GitHub Release
-        if: steps.release.outputs.is_release == 'true'
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: ${{ steps.release.outputs.tag }}
-          name: Release ${{ steps.release.outputs.version }}
-          body_path: release-notes.md
-          draft: false
-          prerelease: false
+          if-no-files-found: warn
