@@ -4,9 +4,40 @@
 > **Target:** Opt-in functionality on Linux, especially NixOS, without changing existing live port monitoring defaults.  
 > **Workflow:** One issue and one focused PR for each milestone below. PRs merge into this fork's `main` in dependency order; upstream is out of scope.
 
+## Implementation outcome — completed in this fork (2026-11-19)
+
+Every original milestone and the fork CI safety preflight has now merged into
+**ash0x0/portracker:main**, in dependency order. No changes were made to the
+original repository during implementation.
+
+| Issue | Completed change | Merged PR |
+| --- | --- | --- |
+| [#11](https://github.com/ash0x0/portracker/issues/11) | Fork-only native validation CI; no publishing or auto-tagging | [#12](https://github.com/ash0x0/portracker/pull/12) |
+| [#3](https://github.com/ash0x0/portracker/issues/3) | Persistent SQLite registry, provisional identity and migration | [#13](https://github.com/ash0x0/portracker/pull/13) |
+| [#4](https://github.com/ash0x0/portracker/issues/4) | Background source-scoped discovery and offline/unknown reconciliation | [#14](https://github.com/ash0x0/portracker/pull/14) |
+| [#5](https://github.com/ash0x0/portracker/issues/5) | Searchable paginated History UI and Forget | [#15](https://github.com/ash0x0/portracker/pull/15) |
+| [#6](https://github.com/ash0x0/portracker/issues/6) | Opt-in real root-HTML title and cached raster favicon | [#16](https://github.com/ash0x0/portracker/pull/16) |
+| [#7](https://github.com/ash0x0/portracker/issues/7) | Authenticated native Linux, systemd user/system attribution | [#17](https://github.com/ash0x0/portracker/pull/17) |
+| [#8](https://github.com/ash0x0/portracker/issues/8) | Verified Docker Compose logical identities and safe provenance | [#18](https://github.com/ash0x0/portracker/pull/18) |
+| [#9](https://github.com/ash0x0/portracker/issues/9) | Copy-only recovery recipes and versioned manual notes | [#19](https://github.com/ash0x0/portracker/pull/19) |
+| [#10](https://github.com/ash0x0/portracker/issues/10) | NixOS-oriented integration tests, safe fork Compose and operator guide | [#20](https://github.com/ash0x0/portracker/pull/20) |
+
+**Latest verified CI:** [fork run #44618250064](https://github.com/ash0x0/portracker/actions/runs/44618250064)
+passed on native AMD64 and ARM64, with 38 Jest suites / 440 backend tests,
+54 frontend tests, 15 release tests, native Docker image builds and browser
+contracts. The registry's real localhost HTTP/SQLite lifecycle and
+400-listener fixtures are included.
+
+**Not yet validated:** real-machine NixOS user/system services, rootless
+Docker or host-specific process permissions. Follow the manual acceptance
+checklist in [docs/service-registry-nixos.md](service-registry-nixos.md).
+A periodic scanner cannot observe processes that start and stop between
+polls, and HTML root titles are not browser-tab titles. Actual restart
+execution is intentionally out of scope: hints are copy-only.
+
 ## Goal and user story
 
-After any service listens on a local port, Portracker should **automatically discover it, remember it permanently, and make it recoverable**. For HTTP services it should capture the actual browser tab title and favicon; for services with identifiable ownership it should save the process manager, original project location, and a **read-only** restart recipe. When the service exits, disappears, or the machine reboots, its entry remains visible with a meaningful status.
+After any service listens on a local port, Portracker should **automatically discover it, remember it permanently, and make it recoverable**. For HTTP services it should capture the actual HTTP-root HTML title and favicon (not an open browser tab's dynamic title); for services with identifiable ownership it should save the process manager, original project location, and a **read-only** restart recipe. When the service exits, disappears, or the machine reboots, its entry remains visible with a meaningful status.
 
 ## Audited implementation context (fork `main`, v1.3.18)
 
@@ -57,7 +88,7 @@ The full fork tree and key code paths were inspected for this planning revision.
 7. **Read-only recovery (#9):** recipe generation is based on structured, allowlisted provenance tokens, not persisted raw argv; render shell-safe copyable hints with confidence and staleness warnings. No privileged start/stop endpoints.
 8. **Fork deployment and finite sampling (#10):** current `docker-compose.yml` references `mostafawahied/portracker:latest`. For testing the fork, explicitly build/point at the fork's own image. Periodic scans can miss short-lived processes; after reboot statuses are stale until an authoritative scan.
 
-**Acceptance boundary:** this plan is a source-level design review, not a claim that implementation code or NixOS integration tests have already run.
+**Acceptance boundary:** this section documents the original design review. All feature PRs subsequently merged, with portable Linux CI passing as described above; manual real-machine NixOS checks remain outstanding.
 
 ## Architectural principles
 
