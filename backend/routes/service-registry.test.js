@@ -2,9 +2,18 @@
 
 const express = require('express');
 const Database = require('better-sqlite3');
-const { describe, test, expect } = require('@jest/globals');
+const { describe, test, expect, afterAll } = require('@jest/globals');
+const originalDatabasePath = process.env.DATABASE_PATH;
+process.env.DATABASE_PATH = ':memory:';
 const { createServiceRegistry } = require('../lib/service-registry/registry');
 const { createRegistryRouter } = require('./service-registry');
+const sharedDb = require('../db');
+
+afterAll(() => {
+  sharedDb.close();
+  if (originalDatabasePath === undefined) delete process.env.DATABASE_PATH;
+  else process.env.DATABASE_PATH = originalDatabasePath;
+});
 
 async function withServer(run) {
   const oldAuth = process.env.ENABLE_AUTH;
