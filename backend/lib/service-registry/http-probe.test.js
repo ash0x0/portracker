@@ -117,6 +117,13 @@ describe('explicit local-host probe policy', () => {
     });
   });
 
+  test('a stalled HTTP page is abandoned within a bounded timeout', async () => {
+    await withHttpServer(() => {}, async port => {
+      await expect(probeWebMetadata({ host: '127.0.0.1', port, timeoutMs: 120 }))
+        .rejects.toMatchObject({ code: 'timeout' });
+    });
+  });
+
   test('rejects oversized HTML and refuses non-HTML responses', async () => {
     await withHttpServer((_req, res) => {
       res.writeHead(200, { 'Content-Type': 'text/html' });
