@@ -41,6 +41,8 @@ function createHttpMetadataStore(db) {
     "AND e.protocol = 'tcp' AND e.internal = 0 ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS host_port " +
     'FROM registry_services s LEFT JOIN registry_http_metadata m ON m.service_id = s.id ' +
     "WHERE s.server_id = 'local' AND s.status = 'listening' AND " +
+    "EXISTS (SELECT 1 FROM registry_endpoints ep WHERE ep.service_id = s.id " +
+    "AND ep.protocol = 'tcp' AND ep.internal = 0) AND " +
     '(m.last_attempt_at IS NULL OR m.last_attempt_at <= ?) AND ' +
     '(m.fetched_at IS NULL OR m.fetched_at <= ?) ' +
     'ORDER BY s.last_seen_at DESC, s.id LIMIT ?'
