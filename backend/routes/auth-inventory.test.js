@@ -64,6 +64,7 @@ describe("all API route authentication", () => {
     expect(rows).toContain("POST /api/servers/:id/generate-port");
     expect(rows).toContain("POST /api/auth/change-password");
     expect(rows).toContain("GET /api/service-registry");
+    expect(rows).toContain("GET /api/service-registry/scan-status");
     expect(rows).toContain("GET /api/service-registry/:id");
     expect(rows).toContain("DELETE /api/service-registry/:id");
   });
