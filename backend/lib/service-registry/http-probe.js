@@ -152,7 +152,8 @@ async function probeWebMetadata({ host, port, timeoutMs = 2500 }) {
   let icon = null;
   try {
     icon = iconHref ? new URL(iconHref, page.finalUrl) : new URL('/favicon.ico', rootUrl);
-    if (icon.origin !== rootUrl.origin || icon.username || icon.password || icon.href.length > 2400) {
+    if (icon.origin !== rootUrl.origin || icon.username || icon.password ||
+        icon.href.length > 2400 || !/\.(ico|png|jpg|jpeg|gif|webp)$/i.test(icon.pathname)) {
       icon = null;
     }
   } catch { icon = null; }
