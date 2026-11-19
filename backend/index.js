@@ -18,6 +18,8 @@ const settingsRoutes = require('./routes/settings');
 const autoxposeRoutes = require('./routes/autoxpose');
 const settingsManager = require('./lib/settings-manager');
 const { registerServerRoutes } = require('./routes/servers');
+const { createServiceRegistry } = require('./lib/service-registry/registry');
+const { createRegistryRouter } = require('./routes/service-registry');
 const recoveryManager = require('./lib/recovery-manager');
 const { enrichComposeLabelsOnPorts: enrichComposeLabelsOnPortsImpl } = require('./lib/docker/compose-attribution');
 const { getDockerHostIP } = require('./lib/docker-host');
@@ -470,6 +472,15 @@ if (!settingsManager.initializeSettingsStorage()) {
   process.exit(1);
 }
 
+// History storage is isolated from live collection. Scanner enrollment is opt-in
+// and arrives in a separate PR; failure here must not break existing monitoring.
+let serviceRegistry = null;
+try {
+  serviceRegistry = createServiceRegistry(db);
+} catch (error) {
+  logger.error('Historical service registry could not be initialized:', error.message);
+}
+
 const app = express();
 
 const corsOrigins = getConfiguredCorsOrigins();
@@ -512,6 +523,12 @@ app.use(['/api/ports', '/api/all-ports', '/api/services', '/api/servers/:id/scan
 
 app.use('/api/auth', authRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
+if (serviceRegistry) {
+  app.use('/api/service-registry', createRegistryRouter(serviceRegistry));
+} else {
+  app.use('/api/service-registry', requireAuth, (_req, res) =>
+    res.status(503).json({ error: 'Historical service registry is unavailable' }));
+}
 app.use('/api/autoxpose', requireAuth, autoxposeRoutes);
 registerServerRoutes(app, { db, logger, requireAuth, validateServerInput });
 
