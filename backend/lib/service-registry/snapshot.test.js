@@ -3,6 +3,7 @@
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
+const net = require('node:net');
 const { describe, expect, test } = require('@jest/globals');
 const ProcParser = require('../proc-parser');
 const { captureHostTcp, captureDockerPublished } = require('./snapshot');
@@ -22,6 +23,24 @@ describe('source-complete port capture', () => {
       .toBe(false);
     expect((await captureHostTcp({ parser, dockerized: false, hostProcTrusted: false })).complete)
       .toBe(true);
+  });
+
+  test('real Linux localhost TCP listener appears in an authoritative snapshot', async () => {
+    if (process.platform !== 'linux') return;
+    const server = net.createServer();
+    await new Promise((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(0, '127.0.0.1', resolve);
+    });
+    const port = server.address().port;
+    try {
+      const snapshot = await captureHostTcp({ dockerized: false, hostProcTrusted: true });
+      expect(snapshot.complete).toBe(true);
+      expect(snapshot.rows.some(row => row.host_port === port && row.protocol === 'tcp'))
+        .toBe(true);
+    } finally {
+      await new Promise(resolve => server.close(resolve));
+    }
   });
 
   test('strict /proc parser does not call missing tcp6 a successful empty scan', async () => {
