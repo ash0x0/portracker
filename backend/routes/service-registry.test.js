@@ -113,3 +113,32 @@ describe('cached HTTP metadata routes', () => {
     expect(invalid.status).toBe(404);
   }));
 });
+
+
+describe('private Linux provenance API', () => {
+  test('never leaks cwd or executable when global authentication is disabled', async () => withServer(
+    async ({ registry, provenanceStore, url }) => {
+      process.env.ENABLE_AUTH = 'false';
+      const service = registry.observe({
+        host_ip: '127.0.0.1', host_port: 3000, protocol: 'tcp',
+        source: 'system', owner: 'node', pid: 987,
+      });
+      provenanceStore.record(service.id, {
+        kind: 'systemd_user_service', confidence: 'observed',
+        unitName: 'dev.service', unitScope: 'user',
+        pid: 987, startTicks: '998877', uid: 1000,
+        cwd: '/home/dev/private-project', executablePath: '/nix/store/secret/bin/node',
+      }, Date.now());
+      const response = await fetch(url + '/' + service.id);
+      expect(response.status).toBe(200);
+      const result = await response.json();
+      expect(result).not.toHaveProperty('linuxProvenance');
+      expect(JSON.stringify(result)).not.toContain('private-project');
+      const list = await fetch(url);
+      expect(JSON.stringify(await list.json())).not.toContain('private-project');
+
+      process.env.ENABLE_AUTH = 'true';
+      expect((await fetch(url + '/' + service.id)).status).toBe(401);
+    }
+  ));
+});
