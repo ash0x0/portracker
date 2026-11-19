@@ -32,7 +32,8 @@ In particular, **never mark all services offline because a collector returned an
 
 | Order | Reviewable issue / proposed PR | Prerequisites |
 | --- | --- | --- |
-| 1 | [#3 — Storage and historical identities](https://github.com/ash0x0/portracker/issues/3) | none |
+| 0 | [#11 — Fork CI validation-only preflight](https://github.com/ash0x0/portracker/issues/11) | none; before merging PR #1 or any feature PR |
+| 1 | [#3 — Storage and historical identities](https://github.com/ash0x0/portracker/issues/3) | none (but #11 before merge) |
 | 2 | [#4 — Autonomous scanner and state reconciliation](https://github.com/ash0x0/portracker/issues/4) | #3 |
 | 3 | [#5 — Searchable offline/history UI](https://github.com/ash0x0/portracker/issues/5) | #3, #4 |
 | 4 | [#6 — HTTP title/favicon/URL capture](https://github.com/ash0x0/portracker/issues/6) | #3, #4 |
@@ -43,15 +44,30 @@ In particular, **never mark all services offline because a collector returned an
 
 Each issue includes feature scope, likely files, data model or algorithm, explicit non-goals, and acceptance tests. Issues #5, #6, #7 and #8 can be developed independently **after the shared registry/scanner foundations**, but dependent PRs should target the fork's `main` after their prerequisites merge.
 
+## Engineering review corrections (2026-11-19)
+
+The full fork tree and key code paths were inspected for this planning revision. These are **design decisions to follow in the individual implementation PRs**:
+
+1. **Ship preflight #11 first:** existing `.github/workflows/docker-publish.yml` can attempt Docker Hub login/push on a non-PR main/tag event, and `auto-tag.yml` can create version tags. Split fork validation from release/publish; avoid merging **this documentation PR #1** until fork workflows are safe.
+2. **Provisional history foundation (#3):** `/api/ports` in `backend/index.js` merges by address/port/protocol and can lose ownership details. Store from normalized collector observations, using opaque service IDs + observation episodes and allowing later upgrades from #7/#8. Never force a systemd or Compose identity in the storage PR before its collector exists.
+3. **Explicit scan coverage (#4):** `docker_collector.getPorts()` can return a partial Docker+host union after swallowed per-source errors; `system_collector.getPorts()` can return error-shaped rows. Offline reconciliation requires verified complete coverage for that source, not just an empty array. Start with real host/published TCP listeners; internal `ExposedPorts` alone do not imply a listening host port.
+4. **Global configuration / auth (#4, #5, #7, #9):** `settings-schema.js` defines user settings only. Background opt-in and polling interval belong to server/env configuration. Sensitive provenance needs separate opt-in and authentication precautions because `ENABLE_AUTH=false` bypasses `requireAuth` and the default Compose file binds the dashboard on all interfaces.
+5. **Web metadata scope (#6):** probe HTTP root and validated same-origin icon only, with SSRF-safe redirects, size and MIME bounds, safe local icon cache and strict HTML/SVG sanitization rules. A browser's selected deep path, live tab name and JS-dynamic title are not available from a port alone.
+6. **Host vs Docker namespace (#6–#8):** a 127.0.0.1 listener on NixOS is not necessarily reachable from a Docker container. `HOST_PROC` can improve process visibility but does not guarantee access to host cwd/exe or Docker Compose config files.
+7. **Read-only recovery (#9):** recipe generation is based on structured, allowlisted provenance tokens, not persisted raw argv; render shell-safe copyable hints with confidence and staleness warnings. No privileged start/stop endpoints.
+8. **Fork deployment and finite sampling (#10):** current `docker-compose.yml` references `mostafawahied/portracker:latest`. For testing the fork, explicitly build/point at the fork's own image. Periodic scans can miss short-lived processes; after reboot statuses are stale until an authoritative scan.
+
+**Acceptance boundary:** this plan is a source-level design review, not a claim that implementation code or NixOS integration tests have already run.
+
 ## Architectural principles
 
 - Separate **live observations** (the current port scan) from **historical identities** (an enduring catalog). An endpoint/port is not an application identity.
-- Process IDs and container IDs are observations, not durable application IDs. Derive stable identities from reliable available provenance; otherwise use conservative revisions and mark uncertain relationships. Preserve both records if a port might have changed ownership.
-- An **empty successful scan** means observed listeners disappeared; a **failed or partial scan** means status is *unknown* and must never mark every record offline.
+- Process IDs and container IDs are observations, not durable application IDs. Issue #3 creates provisional IDs/episodes from available evidence; issues #7/#8 provide stronger systemd/Compose attribution later. Preserve old records on uncertain port reuse rather than claiming perfect recognition.
+- An **empty, authoritative scan of the relevant source scope** means previously observed listeners disappeared; a failed/partial scan means *unknown/stale*. Docker-only failures must never mark native host ports offline.
 - A **listening TCP socket** is not the same as a healthy HTTP endpoint. Keep network reachability, listener presence, and application health distinct.
-- Every write is idempotent. Scan records must survive restarts and schema migrations without requiring a browser tab.
+- Every write is idempotent. Scan records must survive restarts and schema migrations without requiring a browser tab. Background collection is **server-wide opt-in** (not a user setting) and can miss processes that start/stop between periodic scans.
 - No unsanitized command lines, environment variables, cookies, credentials, or page bodies in SQLite or HTTP responses.
-- Metadata probes are bounded, host-aware, opt-in, and do not bypass current SSRF protections; no JavaScript execution.
+- Metadata probes are bounded, host-aware, opt-in, and do not bypass current SSRF protections; no JavaScript execution. They start at the service's HTTP root, not arbitrary Chrome tab paths; loopback from a container is not the host's loopback.
 - Data collection is **read-only**. Do not introduce systemd/Docker start/stop APIs or a general command runner.
 - Maintain compatibility with existing API routes and peer installations; new routes are version-tolerant.
 
@@ -61,7 +77,7 @@ Each issue includes feature scope, likely files, data model or algorithm, explic
 
 **Modules:** `backend/db.js`, new `backend/lib/service-registry/` DAO, migration and DAO tests.
 
-- Add indexed SQLite history tables for logical services and observed listeners, scoped to a known host/server.
+- Add indexed SQLite history tables for provisional logical services and observed listener episodes, scoped to a known host/server. Separate service ID, episode ID and endpoint key: reliable Compose/systemd identities arrive in later PRs.
 - Record first/last seen, address/port/protocol, source, safe owner/Compose identifiers, observation fingerprint and last known display name.
 - Avoid PID-only keys. Distinguish unrelated apps sharing port 3000 at different times; preserve historical records on conflict.
 - Make migration idempotent and safe against existing databases; expose a paginated read-only history API if feasible without scanner coupling.
@@ -72,7 +88,7 @@ Each issue includes feature scope, likely files, data model or algorithm, explic
 
 **Modules:** existing collectors, app lifecycle, new scheduler.
 
-- Opt-in low-frequency host scan, independent of connected dashboard browsers.
+- Opt-in low-frequency host scan, independent of connected dashboard browsers. Global `SERVICE_REGISTRY_ENABLED` and bounded `SERVICE_REGISTRY_SCAN_INTERVAL_MS` are server settings in `.env.example`, not browser/localStorage or per-user settings.
 - Feed successful complete snapshots to the DAO and reconcile entries as active/offline. Mark **unknown** (or retain last known state with stale indicator) on failed/partial scans.
 - Avoid overlap, rapid retries, thundering herd, or sync SQLite writes on every UI refresh. Allow configuration of frequency.
 - Keep individual collector errors visible and make multi-source scans non-destructive.
@@ -93,7 +109,7 @@ Each issue includes feature scope, likely files, data model or algorithm, explic
 **Modules:** opt-in metadata probe and safe icon cache, DAO fields, historical UI.
 
 - Probe only likely HTTP(S) listeners or verified web endpoints; resolve local URL correctly including loopback/IPv6.
-- Parse `<title>`, common favicon link relations, optional `/favicon.ico` fallback. Resolve relative URLs; store a small, validated cached icon blob or local file reference.
+- Parse the HTTP **root HTML** `<title>`, common favicon link relations, optional `/favicon.ico` fallback. Resolve relative same-origin URLs; store a small, validated cached icon blob or local file reference. This cannot discover arbitrary open browser tab routes.
 - Respect user overrides. Don't lose previously fetched metadata when an app goes offline.
 - Rate-limit, cap response/image bytes, enforce content types, timeouts, redirect count, and target address/hostname policies.
 - **Done:** Next.js/Vite-style fixture yields expected title and relative icon offline; authentication, non-HTTP and malicious responses degrade safely.
@@ -135,15 +151,17 @@ Each issue includes feature scope, likely files, data model or algorithm, explic
 
 - Test end-to-end across Linux systemd, user systemd, Docker/Compose, and manual `npm/pnpm`-style dev servers.
 - Verify read-only and opt-in operation from Docker with PID namespace and existing scanner restrictions; document `/proc`, host network and rootless limitations.
-- Test two apps using same localhost port sequentially, restart persistence, scanner failure, HTTP title/favicon offline state, and confidence of recovery recipe.
+- Test detectably different apps on the same localhost port sequentially, restart persistence, scanner failure, root HTTP title/favicon offline state, and confidence of recovery recipe. Test unknown state when identity evidence is insufficient.
 - Verify backward compatibility, reasonable CPU/storage overhead and DB backup/migration behavior.
 - Publish setup and privacy/security guidance (auth, local access, Docker API restrictions).
 - **Done:** reproducible demonstration and documented trade-offs on NixOS.
 
 ## PR / issue protocol
 
+Before any merge, complete [CI preflight #11](https://github.com/ash0x0/portracker/issues/11); then follow the reviewable feature workflow below.
+
 For each milestone:
-1. Open an issue with the narrow scope, dependency links, security requirements, acceptance tests and proposed modules.
+1. Use its existing issue (#3–#10), with narrow scope, dependency links, security requirements, acceptance tests and proposed modules.
 2. Create a branch named `feature/service-registry-<area>` from the fork's latest main (or declared prerequisite branch, if unavoidable).
 3. Implement and test the minimum end-to-end slice; update documentation for user-facing changes.
 4. Open a PR **against `ash0x0/portracker:main`**, link the fork issue, include test evidence and explicitly name limitations.
@@ -151,9 +169,9 @@ For each milestone:
 
 ## Acceptance scenario
 
-1. Start a local development server on port 3000 with title **BuildPro** and favicon.
+1. Start a local development server on port 3000, keep it alive through one successful scan, and serve a root HTML title **BuildPro** and favicon.
 2. Observe it; Portracker creates history and captures metadata without manual registration.
 3. Stop the process, restart Portracker and reboot NixOS: the saved entry remains searchable and offline.
-4. Start a *different* service on port 3000: both identities remain distinct.
+4. Start a *detectably different* service on port 3000: both history entries remain distinct. When evidence is insufficient, preserve uncertainty rather than guessing.
 5. For known systemd/Docker/Compose services, inspect provenance and copy the saved restart recipe.
 6. For unknown launch mechanisms, see `unknown` or `unverified` rather than a fabricated instruction.
