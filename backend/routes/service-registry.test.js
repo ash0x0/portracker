@@ -52,6 +52,10 @@ describe('registry REST API authorization and validation', () => {
     expect(detail.status).toBe(200);
     expect((await detail.json()).endpoints[0].hostPort).toBe(3000);
 
+    const scanStatus = await fetch(url + '/scan-status');
+    expect(scanStatus.status).toBe(200);
+    expect(await scanStatus.json()).toEqual({ enabled: false, sources: [] });
+
     const invalid = await fetch(url + '?limit=1000');
     expect(invalid.status).toBe(400);
 
@@ -67,6 +71,7 @@ describe('registry REST API authorization and validation', () => {
     });
     expect((await fetch(url)).status).toBe(401);
     expect((await fetch(url + '/' + record.id)).status).toBe(401);
+    expect((await fetch(url + '/scan-status')).status).toBe(401);
     expect((await fetch(url + '/' + record.id, { method: 'DELETE' })).status).toBe(401);
     expect(registry.getService(record.id)).not.toBeNull();
   }));
