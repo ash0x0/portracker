@@ -102,12 +102,67 @@ describe('source-complete port capture', () => {
     try {
       fs.mkdirSync(path.join(dir, 'net'), { recursive: true });
       fs.writeFileSync(path.join(dir, 'net', 'tcp'), '  sl  local_address rem_address st\n');
+      // A present IPv6 indicator makes the missing tcp6 table suspicious.
+      fs.writeFileSync(path.join(dir, 'net', 'sockstat6'), 'TCP6: inuse 0\n');
       const parser = new ProcParser(dir);
       parser._buildInodeMap = async () => new Map();
       parser._buildInodeMapForInodes = async () => new Map();
       parser.isContainerized = false;
       await expect(parser.getTcpPorts({ strict: true }))
         .rejects.toThrow('Incomplete TCP port snapshot: tcp6');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('strict TCP collection accepts host with IPv4 and no IPv6 stack', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipv4-only-proc-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'net'), { recursive: true });
+      const line = '  0: 0100007F:1051 00000000:0000 0A ' +
+        '00000000:00000000 00:00000000 00000000 1000 0 12345 1 ' +
+        '0000000000000000 100 0 0 10 0';
+      fs.writeFileSync(path.join(dir, 'net', 'tcp'),
+        '  sl  local_address rem_address st\n' + line + '\n');
+      const parser = new ProcParser(dir);
+      parser.isContainerized = false;
+      parser._buildInodeMap = async () => new Map();
+      parser._buildInodeMapForInodes = async () => new Map();
+      const snapshot = await captureHostTcp({
+        parser, dockerized: true, hostProcTrusted: true,
+      });
+      expect(snapshot.complete).toBe(true);
+      expect(snapshot.rows).toEqual([expect.objectContaining({
+        host_ip: '127.0.0.1', host_port: 4177, protocol: 'tcp',
+      })]);
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('strict collection rejects missing IPv6 table if IPv6 interface evidence exists', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipv6-incomplete-proc-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'net'), { recursive: true });
+      fs.writeFileSync(path.join(dir, 'net', 'tcp'), '  sl  local_address rem_address st\n');
+      fs.writeFileSync(path.join(dir, 'net', 'if_inet6'), '::1 host-loopback\n');
+      const parser = new ProcParser(dir);
+      parser.isContainerized = false;
+      parser._buildInodeMap = async () => new Map();
+      parser._buildInodeMapForInodes = async () => new Map();
+      await expect(parser.getTcpPorts({ strict: true }))
+        .rejects.toThrow('Incomplete TCP port snapshot: tcp6');
+    } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('strict collection rejects missing IPv4 table even without IPv6 support', async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipv4-missing-proc-'));
+    try {
+      fs.mkdirSync(path.join(dir, 'net'), { recursive: true });
+      const tcp = path.join(dir, 'net', 'tcp');
+      fs.writeFileSync(tcp, '  sl  local_address rem_address st\n');
+      const parser = new ProcParser(dir);
+      parser.isContainerized = false;
+      parser._buildInodeMap = async () => new Map();
+      fs.rmSync(tcp);
+      await expect(parser.getTcpPorts({ strict: true }))
+        .rejects.toThrow('Incomplete TCP port snapshot: tcp');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
 
