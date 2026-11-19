@@ -155,9 +155,12 @@ describe('source-complete port capture', () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ipv4-missing-proc-'));
     try {
       fs.mkdirSync(path.join(dir, 'net'), { recursive: true });
+      const tcp = path.join(dir, 'net', 'tcp');
+      fs.writeFileSync(tcp, '  sl  local_address rem_address st\n');
       const parser = new ProcParser(dir);
       parser.isContainerized = false;
       parser._buildInodeMap = async () => new Map();
+      fs.rmSync(tcp);
       await expect(parser.getTcpPorts({ strict: true }))
         .rejects.toThrow('Incomplete TCP port snapshot: tcp');
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
