@@ -7,6 +7,7 @@ const originalDatabasePath = process.env.DATABASE_PATH;
 process.env.DATABASE_PATH = ':memory:';
 const { createServiceRegistry } = require('../lib/service-registry/registry');
 const { createHttpMetadataStore } = require('../lib/service-registry/http-store');
+const { createLinuxProvenanceStore } = require('../lib/service-registry/linux-provenance-store');
 const { createRegistryRouter } = require('./service-registry');
 const sharedDb = require('../db');
 
@@ -21,8 +22,9 @@ async function withServer(run) {
   const db = new Database(':memory:');
   const registry = createServiceRegistry(db);
   const httpStore = createHttpMetadataStore(db);
+  const provenanceStore = createLinuxProvenanceStore(db);
   const app = express();
-  app.use('/api/service-registry', createRegistryRouter(registry, { httpStore }));
+  app.use('/api/service-registry', createRegistryRouter(registry, { httpStore, provenanceStore }));
   const server = await new Promise((resolve) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
   });
@@ -30,6 +32,7 @@ async function withServer(run) {
     return await run({
       registry,
       httpStore,
+      provenanceStore,
       url: 'http://127.0.0.1:' + server.address().port + '/api/service-registry',
     });
   } finally {
