@@ -101,8 +101,8 @@ async function requestBounded(initial, { maxBytes, timeoutMs = 2500, accept = '*
           return;
         }
         if (Number(incoming.headers['content-length']) > maxBytes) {
-          incoming.destroy();
           reject(fail('too_large'));
+          incoming.destroy();
           return;
         }
         const chunks = [];
@@ -110,8 +110,8 @@ async function requestBounded(initial, { maxBytes, timeoutMs = 2500, accept = '*
         incoming.on('data', chunk => {
           size += chunk.length;
           if (size > maxBytes) {
-            incoming.destroy();
             reject(fail('too_large'));
+            incoming.destroy();
           } else chunks.push(chunk);
         });
         incoming.once('error', () => reject(fail('network_error')));
