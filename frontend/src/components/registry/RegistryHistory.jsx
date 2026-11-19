@@ -56,6 +56,7 @@ export function RegistryHistory() {
   const [portText, setPortText] = useState("");
   const [status, setStatus] = useState("");
   const [source, setSource] = useState("");
+  const [lastSeenWindow, setLastSeenWindow] = useState("");
   const [page, setPage] = useState(0);
   const [version, setVersion] = useState(0);
   const [data, setData] = useState({ items: [], total: 0 });
@@ -89,6 +90,7 @@ export function RegistryHistory() {
       getRegistryServices({
         limit: PAGE_SIZE, offset: page * PAGE_SIZE, serverId: "local",
         status, source, search, port: parsedPort,
+        seenSince: lastSeenWindow ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
       }, controller.signal),
       getRegistryScanStatus(controller.signal),
     ]).then(([list, statusResult]) => {
@@ -99,7 +101,7 @@ export function RegistryHistory() {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [page, status, source, search, parsedPort, invalidPort, version]);
+  }, [page, status, source, search, parsedPort, invalidPort, lastSeenWindow, version]);
 
   useEffect(() => {
     if (!selectedId) { setDetail(null); setDetailError(""); return; }
@@ -142,7 +144,7 @@ export function RegistryHistory() {
             <History className="w-6 h-6" /> Service history
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Remembered TCP listeners, including services that are no longer running.
+            Remembered TCP listeners on this Portracker host, including services that are no longer running.
           </p>
         </div>
         <button type="button" onClick={refresh} className={FIELD_CLASS + " inline-flex items-center gap-2"}>
@@ -152,7 +154,7 @@ export function RegistryHistory() {
 
       <ScanSummary scan={scan} />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3" aria-label="History filters">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" aria-label="History filters">
         <label className="text-sm space-y-1">
           <span className="text-slate-600 dark:text-slate-300">Name</span>
           <span className="relative block">
@@ -176,6 +178,17 @@ export function RegistryHistory() {
             <option value="listening">Listening</option>
             <option value="offline">Offline</option>
             <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label className="text-sm space-y-1">
+          <span className="text-slate-600 dark:text-slate-300">Last seen</span>
+          <select aria-label="Filter by last seen" value={lastSeenWindow}
+            onChange={event => { setLastSeenWindow(event.target.value); setPage(0); }}
+            className={FIELD_CLASS + " w-full"}>
+            <option value="">Any time</option>
+            <option value="1">Past 24 hours</option>
+            <option value="7">Past 7 days</option>
+            <option value="30">Past 30 days</option>
           </select>
         </label>
         <label className="text-sm space-y-1">
