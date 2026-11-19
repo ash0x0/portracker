@@ -94,7 +94,7 @@ class ProcParser {
   }
 
   /** Parse /proc/net/tcp and /proc/net/tcp6 */
-  async getTcpPorts() {
+  async getTcpPorts({ strict = false } = {}) {
   const ports = [];
   const prelim = [];
   const inodeMap = await this._buildInodeMap();
@@ -138,6 +138,9 @@ class ProcParser {
           prelim.push({ inode: inodeNum });
         }
       } catch (err) {
+        if (strict) {
+          throw new Error(`Incomplete TCP port snapshot: ${file} could not be read`, { cause: err });
+        }
         this.logger.warn(`Warning reading network file ${file}:`, err.message);
       }
     }

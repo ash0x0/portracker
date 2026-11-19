@@ -45,10 +45,22 @@ function migrateRegistrySchema(db) {
       '  ON registry_endpoints (host_ip, host_port, protocol, source);',
       'CREATE INDEX IF NOT EXISTS idx_registry_endpoints_service',
       '  ON registry_endpoints (service_id, last_seen_at DESC);',
+      'CREATE TABLE IF NOT EXISTS registry_scan_state (',
+      '  server_id TEXT NOT NULL,',
+      "  source TEXT NOT NULL CHECK (source IN ('system', 'docker')),",
+      '  last_attempt_at INTEGER NOT NULL,',
+      '  last_success_at INTEGER,',
+      "  outcome TEXT NOT NULL CHECK (outcome IN ('complete', 'partial', 'failed')),",
+      '  error_code TEXT,',
+      '  PRIMARY KEY (server_id, source)',
+      ');',
+
     ].join('\n'));
 
     db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
       .run(1, Date.now());
+    db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
+      .run(2, Date.now());
   });
   migrate();
 }

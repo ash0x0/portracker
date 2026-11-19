@@ -19,6 +19,7 @@ const autoxposeRoutes = require('./routes/autoxpose');
 const settingsManager = require('./lib/settings-manager');
 const { registerServerRoutes } = require('./routes/servers');
 const { createServiceRegistry } = require('./lib/service-registry/registry');
+const { createRegistryScanner, readRegistryConfig } = require('./lib/service-registry/scanner');
 const { createRegistryRouter } = require('./routes/service-registry');
 const recoveryManager = require('./lib/recovery-manager');
 const { enrichComposeLabelsOnPorts: enrichComposeLabelsOnPortsImpl } = require('./lib/docker/compose-attribution');
@@ -472,13 +473,19 @@ if (!settingsManager.initializeSettingsStorage()) {
   process.exit(1);
 }
 
-// History storage is isolated from live collection. Scanner enrollment is opt-in
-// and arrives in a separate PR; failure here must not break existing monitoring.
+// Service history is separate from existing live views. An invalid scanner
+// config or inaccessible host/Docker source must not interrupt the monitor.
 let serviceRegistry = null;
+let registryScanner = null;
+let registryScanEnabled = false;
 try {
   serviceRegistry = createServiceRegistry(db);
+  serviceRegistry.markStale('local');
+  const registryConfig = readRegistryConfig();
+  registryScanner = createRegistryScanner({ registry: serviceRegistry, ...registryConfig, logger });
+  registryScanEnabled = registryConfig.enabled;
 } catch (error) {
-  logger.error('Historical service registry could not be initialized:', error.message);
+  logger.warn('Historical service scanner unavailable:', error.message);
 }
 
 const app = express();
@@ -524,7 +531,7 @@ app.use(['/api/ports', '/api/all-ports', '/api/services', '/api/servers/:id/scan
 app.use('/api/auth', authRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 if (serviceRegistry) {
-  app.use('/api/service-registry', createRegistryRouter(serviceRegistry));
+  app.use('/api/service-registry', createRegistryRouter(serviceRegistry, { scanEnabled: registryScanEnabled }));
 } else {
   app.use('/api/service-registry', requireAuth, (_req, res) =>
     res.status(503).json({ error: 'Historical service registry is unavailable' }));
@@ -2523,6 +2530,7 @@ try {
   app.listen(PORT, "0.0.0.0", () => {
     logger.info(`Server is now listening on http://0.0.0.0:${PORT}`);
     logger.info("Full startup message complete.");
+    registryScanner?.start();
   });
 } catch (listenError) {
   logger.fatal("app.listen failed to start:", listenError.message);

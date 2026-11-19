@@ -54,12 +54,12 @@ function createServiceRegistry(db) {
   migrateRegistrySchema(db);
 
   const findIdentity = db.prepare(
-    'SELECT id FROM registry_services ' +
+    'SELECT id, status FROM registry_services ' +
     'WHERE server_id = ? AND identity_key = ? ' +
     'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
   );
   const findWeakEndpoint = db.prepare(
-    'SELECT s.id FROM registry_services s ' +
+    'SELECT s.id, s.status FROM registry_services s ' +
     'JOIN registry_endpoints e ON e.service_id = s.id ' +
     'WHERE s.server_id = ? AND s.identity_key IS NULL ' +
     'AND e.host_ip = ? AND e.host_port = ? AND e.protocol = ? ' +
@@ -105,6 +105,13 @@ function createServiceRegistry(db) {
         item.serverId, item.hostIp, item.hostPort, item.protocol,
         item.internal, item.source
       );
+    }
+
+    // Native PIDs can be reused; a confirmed disappearance ends the old
+    // provisional episode even if a future process reuses its PID and port.
+    // A Docker container ID can remain stable across a stop/restart.
+    if (existing?.status === 'offline' && item.source !== 'docker') {
+      existing = null;
     }
 
     const serviceId = existing ? existing.id : randomUUID();
@@ -199,11 +206,90 @@ function createServiceRegistry(db) {
     return forgetOne(id);
   }
 
+  function markStale(serverId = 'local') {
+    if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
+    return db.prepare(
+      "UPDATE registry_services SET status = 'unknown' " +
+      "WHERE server_id = ? AND status = 'listening'"
+    ).run(serverId).changes;
+  }
+
+  const scanRows = db.prepare(
+    'SELECT server_id, source, last_attempt_at, last_success_at, outcome, error_code ' +
+    'FROM registry_scan_state WHERE server_id = ? ORDER BY source'
+  );
+
+  function getScanStatus(serverId = 'local') {
+    if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
+    return scanRows.all(serverId).map(row => ({
+      source: row.source,
+      lastAttemptAt: row.last_attempt_at,
+      lastSuccessAt: row.last_success_at,
+      outcome: row.outcome,
+      errorCode: row.error_code,
+    }));
+  }
+
+  const saveScan = db.prepare(
+    'INSERT INTO registry_scan_state ' +
+    '(server_id, source, last_attempt_at, last_success_at, outcome, error_code) ' +
+    'VALUES (?, ?, ?, ?, ?, ?) ' +
+    'ON CONFLICT(server_id, source) DO UPDATE SET ' +
+    'last_attempt_at = MAX(registry_scan_state.last_attempt_at, excluded.last_attempt_at), ' +
+    "last_success_at = CASE WHEN excluded.outcome = 'complete' " +
+    'THEN MAX(COALESCE(registry_scan_state.last_success_at, 0), excluded.last_attempt_at) ' +
+    'ELSE registry_scan_state.last_success_at END, ' +
+    'outcome = excluded.outcome, error_code = excluded.error_code'
+  );
+
+  /**
+   * A snapshot is complete only for its single source. Missing observations
+   * from a different source must NEVER be marked offline.
+   */
+  const reconcile = db.transaction(({ serverId = 'local', source, rows = [],
+    complete = false, at = Date.now(), errorCode = null }) => {
+    if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
+    if (!['system', 'docker'].includes(source)) throw new TypeError('Invalid scan source');
+    if (!Array.isArray(rows) || rows.length > 4096) throw new TypeError('Invalid scan rows');
+    if (!Number.isSafeInteger(at) || at < 0) throw new TypeError('Invalid scan timestamp');
+    if (errorCode !== null && (typeof errorCode !== 'string' ||
+        !/^[a-z][a-z0-9_]{0,63}$/.test(errorCode))) {
+      throw new TypeError('Invalid scan error code');
+    }
+
+    const observed = new Set();
+    for (const row of rows) {
+      const item = normalizeObservation(row, serverId);
+      if (item.source !== source || item.protocol !== 'tcp' || item.internal) {
+        throw new TypeError('Snapshot contains out-of-scope listener');
+      }
+      observed.add(insertObservation(row, { serverId, at }));
+    }
+
+    // When a source is incomplete, prior listening records become unknown;
+    // positive observations above remain listening. Definitive offline
+    // requires a successful and complete snapshot for THIS source.
+    const status = complete ? 'offline' : 'unknown';
+    const ids = [...observed];
+    const excluded = ids.length ? ' AND id NOT IN (' + ids.map(() => '?').join(',') + ')' : '';
+    db.prepare(
+      'UPDATE registry_services SET status = ?, updated_at = MAX(updated_at, ?) ' +
+      'WHERE server_id = ? AND source = ?' + excluded
+    ).run(status, at, serverId, source, ...ids);
+
+    const outcome = complete ? 'complete' : (rows.length ? 'partial' : 'failed');
+    saveScan.run(serverId, source, at, complete ? at : null, outcome, errorCode);
+    return { source, outcome, count: ids.length, at };
+  });
+
   return {
     observe: (row, options = {}) => getService(insertObservation(row, options)),
     getService,
     listServices,
     forgetService,
+    markStale,
+    getScanStatus,
+    reconcileSource: (snapshot) => reconcile(snapshot),
   };
 }
 
