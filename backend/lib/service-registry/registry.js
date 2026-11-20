@@ -187,6 +187,25 @@ function createServiceRegistry(db) {
         'WHERE e.service_id = s.id AND e.host_port = ?)');
       params.push(port);
     }
+    if (filters.portPrefix !== undefined) {
+      if (filters.port !== undefined) throw new TypeError('Specify port or portPrefix');
+      const prefix = String(filters.portPrefix);
+      if (!/^[1-9][0-9]{0,4}$/.test(prefix) || Number(prefix) > 65535) {
+        throw new TypeError('Invalid portPrefix');
+      }
+      // Numeric ranges preserve port-prefix semantics without a full-table
+      // CAST(host_port AS TEXT), and continue using the endpoint port index.
+      const ranges = [];
+      for (let scale = 1, digits = prefix.length; digits <= 5; scale *= 10, digits += 1) {
+        const from = Number(prefix) * scale;
+        const to = Math.min((Number(prefix) + 1) * scale - 1, 65535);
+        if (from > 65535) break;
+        ranges.push('(e.host_port BETWEEN ? AND ?)');
+        params.push(from, to);
+      }
+      clauses.push('EXISTS (SELECT 1 FROM registry_endpoints e ' +
+        'WHERE e.service_id = s.id AND (' + ranges.join(' OR ') + '))');
+    }
 
     const where = ' WHERE ' + clauses.join(' AND ');
     const count = db.prepare('SELECT COUNT(*) AS total FROM registry_services s' + where)
