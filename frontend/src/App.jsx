@@ -2058,7 +2058,7 @@ export default function App() {
                 <div role="tabpanel" aria-label="History view"><RegistryHistory /></div>
               ) : activeView === "pinned" ? (
                 <div role="tabpanel" aria-label="Pinned services view">
-                  <RegistryHistory pinnedOnly />
+                  <RegistryHistory pinnedOnly onBrowseHistory={() => setActiveView("history")} />
                 </div>
               ) : (
                 <div role="tabpanel" aria-label="Live ports view">
