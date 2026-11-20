@@ -30,6 +30,10 @@ export async function phaseCContracts(context, options) {
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await group.waitFor();
+    await page.getByRole('button', { name: /^example-service-78\b/ })
+      .waitFor({ state: 'hidden' });
+    await page.locator('section[aria-label="Saved service details"]')
+      .getByText('example-service-81', { exact: true }).waitFor();
     assert.equal(records[78].pinned, false);
     assert.equal(records[81].pinned, true, 'Unpin only affects selected durable service');
     await page.getByRole('button', { name: 'Unpin selected service' }).waitFor();
