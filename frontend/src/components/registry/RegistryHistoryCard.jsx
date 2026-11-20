@@ -26,7 +26,7 @@ export function RegistryHistoryCard({
           aria-expanded={expanded}
           aria-controls={expanded ? "history-detail-" + service.id : undefined}
           aria-label={service.displayName + " service details"}
-          className="flex min-w-0 flex-1 items-center gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
+          className="flex w-full min-w-0 items-center gap-3 text-left lg:w-auto lg:flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
           <ServiceListChevron expanded={expanded} />
           {service.iconHash
             ? <img alt="" loading="lazy" width="24" height="24" className="h-6 w-6 shrink-0 object-contain"
@@ -58,7 +58,7 @@ export function RegistryHistoryCard({
             )}
           </span>
         </button>
-        <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+        <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-2 lg:w-auto">
           {service.previewPort != null && (
             <ServicePortBadge port={service.previewPort} active={service.status === "listening"}
               title="Last observed endpoint" />
