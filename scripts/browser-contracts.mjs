@@ -275,7 +275,10 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.reload();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
-    await page.getByRole('button', { name: 'Unpin example-service-103' }).click();
+    assert.equal(await page.getByRole('button', { name: 'Unpin example-service-103' }).count(), 0,
+      'Collapsed Pinned service must not offer a one-click Unpin');
+    await page.getByRole('button', { name: /^example-service-103\b/ }).click();
+    await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await page.getByText('No pinned services match these filters.').waitFor();
     await page.getByRole('button', { name: 'Browse History' }).click();
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
