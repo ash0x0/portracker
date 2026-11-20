@@ -74,7 +74,7 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Commands are suggestions to copy and review. Portracker never executes, starts or stops services.
       </p>
-      <div className="min-w-0 space-y-2">
+      <div data-recovery-command-group className="min-w-0 space-y-2">
         <h4 className="font-medium text-sm">One-line startup command</h4>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {preferred.command ? "User supplied · unverified" : preferredLine
@@ -138,7 +138,7 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         </p>
       </div>
       {saved.text && (
-        <div className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
+        <div data-recovery-saved-notes className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
           <p className="text-xs font-medium">My saved instructions (preferred)</p>
           <pre className="text-sm whitespace-pre-wrap break-all font-sans">{saved.text}</pre>
         </div>
@@ -150,7 +150,7 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         </p>
       )}
       {(recovery.recipes || []).map(item => (
-        <div key={item.type} className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
+        <div key={item.type} data-recovery-recipe className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
           <p className="text-sm font-medium">{item.title}</p>
           <p className="text-xs text-slate-500">{item.confidence} · {item.hostScope}</p>
           <code className="block text-sm whitespace-pre-wrap break-all select-text">{item.command}</code>
