@@ -176,6 +176,17 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
+async function applyRegistrySearch(page, search) {
+  const applied = page.waitForResponse(response => {
+    const url = new URL(response.url());
+    return url.pathname === '/api/service-registry' &&
+      url.searchParams.get('search') === search && response.status() === 200;
+  });
+  await page.getByRole('textbox', { name: 'Search saved service names' }).fill(search);
+  await applied;
+  await page.waitForTimeout(100);
+}
+
 async function registryHistoryNavigation(page, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
@@ -184,14 +195,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
     await page.getByText('example-unknown', { exact: true }).waitFor();
     await page.getByRole('combobox', { name: 'Filter by status' }).selectOption('offline');
-    const appliedSearch = page.waitForResponse(response => {
-      const url = new URL(response.url());
-      return url.pathname === '/api/service-registry' &&
-        url.searchParams.get('search') === 'example' && response.status() === 200;
-    });
-    await page.getByRole('textbox', { name: 'Search saved service names' }).fill('example');
-    await appliedSearch;
-    await page.waitForTimeout(100);
+    await applyRegistrySearch(page, 'example');
     await page.getByText('Page 1 of 5').waitFor();
     assert.equal(await page.getByText('example-unknown', { exact: true }).count(), 0,
       'A failed source scan must remain unknown, never appear under offline');
