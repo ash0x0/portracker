@@ -83,20 +83,34 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
             : "Startup command unknown · enter a command explicitly"}
         </p>
         <div className="flex flex-wrap items-center gap-2">
-          <input ref={lineInput} aria-label="One-line startup command" readOnly={!editingStart}
-            value={editingStart ? draftLine : preferredLine} maxLength={2000}
-            placeholder="Add a startup command using Edit"
-            onChange={event => { if (editingStart) setDraftLine(event.target.value); }}
-            onKeyDown={event => {
-              if (editingStart && event.key === "Escape") {
-                event.stopPropagation();
-                setEditingStart(false);
-                setMessage("");
-              }
-              if (editingStart && event.key === "Enter") savePreferredStart();
-            }}
-            className="min-w-0 flex-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 font-mono text-sm text-slate-900 dark:text-slate-100"
-          />
+          {editingStart ? (
+            <input ref={lineInput} aria-label="One-line startup command"
+              value={draftLine} maxLength={2000}
+              onChange={event => setDraftLine(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === "Escape") {
+                  event.stopPropagation();
+                  setEditingStart(false);
+                  setMessage("");
+                }
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  savePreferredStart();
+                }
+              }}
+              className="min-w-0 flex-1 rounded-md border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-2 font-mono text-sm text-slate-900 dark:text-slate-100"
+            />
+          ) : preferredLine ? (
+            <code data-testid="registry-start-command-text"
+              className="block min-w-0 flex-1 whitespace-pre-wrap break-words font-mono text-sm text-slate-900 dark:text-slate-100 select-text">
+              {preferredLine}
+            </code>
+          ) : (
+            <span data-testid="registry-start-command-empty"
+              className="min-w-0 flex-1 text-sm italic text-slate-500 dark:text-slate-400">
+              No startup command saved. Select Edit command to add one.
+            </span>
+          )}
           <button type="button" disabled={!preferredLine || editingStart}
             onClick={() => copy(preferredLine)} aria-label="Copy start command"
             className="inline-flex items-center gap-2 rounded-md border px-3 py-2 text-sm disabled:opacity-50">
