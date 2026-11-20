@@ -139,6 +139,6 @@ describe('per-service recovery notes and concurrency', () => {
 
   test('migration v9 is idempotent after reopening the registry', () => fixture((db) => {
     createServiceRegistry(db);
-    expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(9);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(10);
   }));
 });

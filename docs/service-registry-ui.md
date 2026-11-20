@@ -72,3 +72,54 @@ instructions. Clicking **Pin** does **not** restart the process.
 - Unpin in either History or Pinned, and verify it disappears from Pinned
   without being forgotten from History. Check narrow/mobile layout and keyboard
   access.
+
+## Docker / native host-proxy correlation (schema v10, issue #36)
+
+A Docker-published TCP port may be reported twice: the Docker API identifies the
+actual application container and the NixOS native TCP collector sees a separate
+`docker-proxy` listener forwarding that host binding. These represent
+**two source observations of one exposure**, not two applications to pin.
+
+When **both source scans are complete**, Docker inspection has returned real
+container evidence, and there is a unique, **recent listening** match with
+the **same host IP, TCP port and local server ID**, Portracker persistently
+links the native proxy to its Docker service. Default **History → All sources**
+shows **one Docker-owned card**, labelled `docker + system`, with the container
+name, Compose provenance, and Docker recovery instructions. **Source → Native
+system** still shows the raw host-proxy observation for troubleshooting.
+Explicit **Source → Docker** still shows the Docker record.
+
+This is intentionally a **non-destructive presentation merge**: the DB preserves
+both original service IDs, independent source statuses, historical endpoints,
+provenance, and any user-authored notes. System proxy records with a pin, notes,
+or a preferred startup command remain visible; they are never silently hidden
+or moved. The association survives offline transitions, restarts and database
+reopening; deleting the canonical Docker record reveals its original native
+record again. If Docker inspection fails, the scanner does not infer a new link
+from a Linux port alone. Another application reusing a port must not be linked
+on endpoint equality alone: Docker provenance and the `docker-proxy` process
+name must both be present, with fresh and unambiguous observations.
+
+Existing **historical, already-offline** duplicates from before schema v10
+are **not** guessed into a match. They remain accessible until a genuinely
+confirmed live pairing or explicit user cleanup; this is safer than merging
+potentially unrelated past port occupants.
+
+### Manual verification on NixOS
+
+1. Run Phase 7 of [manual acceptance issue #21](https://github.com/ash0x0/portracker/issues/21)
+   with the restricted Docker socket proxy (IPv4-only `DISABLE_IPV6=1` if required).
+2. Check `Docker: complete` and `System: complete`, and discover port
+   4181 or 4183 while its test container is running.
+3. Under History → **All sources**, the Nginx container appears once,
+   with a `docker + system` source label. Open the card to see the **Docker
+   / Compose provenance** section; it is not replaced by `docker-proxy`.
+4. Set Source → **Native system** to see the original `docker-proxy` record;
+   Source → **Docker** to see the actual container record.
+5. Stop the container; after complete scans, the single canonical record
+   becomes Offline and retains its provenance. Test a normal unrelated
+   Python listener on the same port later; it must remain a separate record.
+6. Existing pins and recovery notes are retained. Check source-scoped
+   failure handling by stopping the Docker API proxy temporarily; the
+   independent Linux scanner must still work.
+

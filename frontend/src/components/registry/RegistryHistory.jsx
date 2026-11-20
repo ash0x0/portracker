@@ -319,7 +319,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 {service.previewHostIp || "Unknown host"}:{service.previewPort ?? "?"}
-                {" · "}{service.source}{" · "}{service.endpointCount || 0} endpoint(s)
+                {" · "}{(service.sources || [service.source]).join(" + ")}{" · "}{service.endpointCount || 0} endpoint(s)
               </p>
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Last seen {registryTimestamp(service.lastSeenAt)}
