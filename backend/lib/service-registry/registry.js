@@ -311,6 +311,8 @@ function createServiceRegistry(db) {
   const forgetOne = db.transaction((id) => {
     const found = getById.get(id);
     if (!found) return false;
+    db.prepare('DELETE FROM registry_source_links WHERE system_service_id = ? OR docker_service_id = ?')
+      .run(id, id);
     db.prepare('DELETE FROM registry_process_runs WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_recovery_notes WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_docker_provenance WHERE service_id = ?').run(id);
