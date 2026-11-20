@@ -114,7 +114,7 @@ export function ServiceCardList({
 
           <div className="flex flex-col">
             <div className="flex items-center space-x-2">
-              <span className={SERVICE_CARD_TITLE_CLASS}>
+              <span data-service-list-title className={SERVICE_CARD_TITLE_CLASS}>
                 {serviceName}
               </span>
             </div>
