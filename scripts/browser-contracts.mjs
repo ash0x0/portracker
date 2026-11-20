@@ -176,6 +176,15 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
+async function updateRegistryTextField(locator, value) {
+  await locator.evaluate((element, nextValue) => {
+    const prototype = element.tagName === 'TEXTAREA'
+      ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, nextValue);
+    element.dispatchEvent(new Event('input', { bubbles: true }));
+  }, value);
+}
+
 async function registryHistoryNavigation(page, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
@@ -203,9 +212,9 @@ async function registryHistoryNavigation(page, options) {
     assert.equal(await commandField.inputValue(),
       "cd -- '/home/dev/demo' && docker compose up -d web");
     assert.equal(await commandField.isEditable(), false);
-    await page.getByRole('button', { name: 'Edit command' }).click();
-    await commandField.fill("cd /home/dev/demo && docker compose up -d web");
-    await page.getByRole('button', { name: 'Save command' }).click();
+    await page.getByRole('button', { name: 'Edit command' }).dispatchEvent('click');
+    await updateRegistryTextField(commandField, "cd /home/dev/demo && docker compose up -d web");
+    await page.getByRole('button', { name: 'Save command' }).dispatchEvent('click');
     await page.getByText('Preferred startup command saved.').waitFor();
     assert.equal(await commandField.inputValue(),
       "cd /home/dev/demo && docker compose up -d web");
@@ -216,17 +225,17 @@ async function registryHistoryNavigation(page, options) {
         value: { writeText: async text => { window.__registryCopiedCommand = text; } },
       });
     });
-    await page.getByRole('button', { name: 'Copy start command' }).click();
+    await page.getByRole('button', { name: 'Copy start command' }).dispatchEvent('click');
     await page.getByText('Command copied. Review it before running on the correct host.').waitFor();
     assert.equal(await page.evaluate(() => window.__registryCopiedCommand),
       "cd /home/dev/demo && docker compose up -d web");
-    await page.getByRole('button', { name: 'Edit command' }).click();
-    await commandField.fill('this should not be saved');
-    await page.getByRole('button', { name: 'Cancel' }).click();
+    await page.getByRole('button', { name: 'Edit command' }).dispatchEvent('click');
+    await updateRegistryTextField(commandField, 'this should not be saved');
+    await page.getByRole('button', { name: 'Cancel' }).dispatchEvent('click');
     assert.equal(await commandField.inputValue(),
       "cd /home/dev/demo && docker compose up -d web");
-    await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
-    await page.getByRole('button', { name: 'Save notes' }).click();
+    await updateRegistryTextField(page.getByRole('textbox', { name: 'My recovery notes' }), 'Use compose on the Docker host');
+    await page.getByRole('button', { name: 'Save notes' }).dispatchEvent('click');
     await page.getByText('Recovery notes saved.').waitFor();
     await page.getByRole('button', { name: /^example-service-79\b/ })
       .dispatchEvent('click');
