@@ -1,7 +1,7 @@
 import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { History, Pin, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
 import {
   getRegistryService,
@@ -67,6 +67,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   const [data, setData] = useState({ items: [], total: 0 });
   const [scan, setScan] = useState(null);
   const [loading, setLoading] = useState(true);
+  const hasLoadedListRef = useRef(false);
   const [error, setError] = useState("");
   const [selectedId, setSelectedId] = useState(null);
   const [detail, setDetail] = useState(null);
@@ -94,30 +95,38 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   useEffect(() => {
     if (invalidPort) return;
     const controller = new AbortController();
-    setLoading(true);
+    if (!hasLoadedListRef.current) setLoading(true);
     setError("");
-    Promise.all([
-      getRegistryServices({
-        limit: PAGE_SIZE, offset: page * PAGE_SIZE, serverId: "local",
-        status, source, search, portPrefix: parsedPort,
-        pinnedOnly: pinnedOnly ? true : null,
-        seenSince: lastSeenWindow ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
-      }, controller.signal),
-      getRegistryScanStatus(controller.signal),
-    ]).then(([list, statusResult]) => {
-      if (!controller.signal.aborted) { setData(list); setScan(statusResult); }
+    getRegistryServices({
+      limit: PAGE_SIZE, offset: page * PAGE_SIZE, serverId: "local",
+      status, source, search, portPrefix: parsedPort,
+      pinnedOnly: pinnedOnly ? true : null,
+      seenSince: lastSeenWindow ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
+    }, controller.signal).then(list => {
+      if (controller.signal.aborted) return;
+      hasLoadedListRef.current = true;
+      setData(list);
+      setLoading(false);
     }).catch(err => {
-      if (!controller.signal.aborted) setError(err.message || "Unable to load service history");
-    }).finally(() => {
-      if (!controller.signal.aborted) setLoading(false);
+      if (controller.signal.aborted) return;
+      setError(err.message || "Unable to load service history");
+      setLoading(false);
     });
     return () => controller.abort();
   }, [page, status, source, search, parsedPort, invalidPort, lastSeenWindow, version, pinnedOnly]);
 
   useEffect(() => {
+    const controller = new AbortController();
+    getRegistryScanStatus(controller.signal).then(result => {
+      if (!controller.signal.aborted) setScan(result);
+    }).catch(() => undefined);
+    return () => controller.abort();
+  }, [version]);
+
+  useEffect(() => {
     if (!selectedId) { setDetail(null); setDetailError(""); return; }
     const controller = new AbortController();
-    setDetail(null);
+    setDetail(previous => previous?.id === selectedId ? previous : null);
     setDetailError("");
     getRegistryService(selectedId, controller.signal).then(result => {
       if (!controller.signal.aborted) setDetail(result);

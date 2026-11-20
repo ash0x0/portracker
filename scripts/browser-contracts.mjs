@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import whatsNewConfig from '../frontend/src/lib/whats-new-config.js';
 import { chromium } from 'playwright';
 import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
+import { phaseAContracts } from './phase-a-browser-contracts.mjs';
 
 async function assertLayout(page) {
   const dimensions = await page.evaluate(() => ({ width: window.innerWidth, content: document.documentElement.scrollWidth }));
@@ -259,6 +260,7 @@ async function viewportContract(browser, options) {
     await search.fill('');
     await memoryLabels(page, options);
     await registryHistoryNavigation(page, options);
+    await phaseAContracts(context, options);
     await releaseNotice(page, options.noticePlan.freshVersion);
     await settings(page);
     await peerWarning(page, options);
