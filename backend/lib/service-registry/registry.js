@@ -3,6 +3,7 @@
 const { randomUUID } = require('node:crypto');
 const { migrateRegistrySchema } = require('./schema');
 const { normalizeObservation, validServerId, normalizePort } = require('./identity');
+const { createSourceLinks } = require('./source-links');
 
 function toService(row) {
   if (!row) return null;
@@ -11,6 +12,8 @@ function toService(row) {
     serverId: row.server_id,
     displayName: row.display_name,
     source: row.source,
+    sources: row.source === 'docker' && row.linked_system_count > 0
+      ? ['docker', 'system'] : [row.source],
     identityConfidence: row.identity_confidence,
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
@@ -57,6 +60,7 @@ function boundedInteger(value, name, fallback, maximum, minimum = 0) {
  */
 function createServiceRegistry(db) {
   migrateRegistrySchema(db);
+  const sourceLinks = createSourceLinks(db);
 
   const findIdentity = db.prepare(
     'SELECT id, status FROM registry_services ' +
@@ -164,6 +168,9 @@ function createServiceRegistry(db) {
   });
 
   const getById = db.prepare('SELECT * FROM registry_services WHERE id = ?');
+  const linkedCount = db.prepare(
+    'SELECT COUNT(*) AS n FROM registry_source_links WHERE docker_service_id = ?'
+  );
   const countRuns = db.prepare(
     'SELECT COUNT(*) AS count FROM registry_process_runs WHERE service_id = ?'
   );
@@ -175,7 +182,8 @@ function createServiceRegistry(db) {
   function getService(id) {
     if (typeof id !== 'string' || id.length > 128) throw new TypeError('Invalid service ID');
     const row = getById.get(id);
-    return row ? { ...toService(row), runCount: countRuns.get(id).count,
+    return row ? { ...toService({ ...row, linked_system_count: linkedCount.get(id).n }),
+      runCount: countRuns.get(id).count,
       endpoints: getEndpoints.all(id).map(toEndpoint) } : null;
   }
 
@@ -250,11 +258,22 @@ function createServiceRegistry(db) {
         'WHERE e.service_id = s.id AND (' + ranges.join(' OR ') + '))');
     }
 
+    // Show the Docker-owned service once in All sources. Keep System-specific
+    // filtering as a diagnostic escape hatch and never hide user-owned state.
+    if (filters.source === undefined) {
+      clauses.push("NOT (s.source = 'system' AND s.is_pinned = 0 " +
+        'AND EXISTS (SELECT 1 FROM registry_source_links l ' +
+        'WHERE l.system_service_id = s.id) ' +
+        'AND NOT EXISTS (SELECT 1 FROM registry_recovery_notes n ' +
+        "WHERE n.service_id = s.id AND (n.notes <> '' OR n.start_command <> '')))");
+    }
     const where = ' WHERE ' + clauses.join(' AND ');
     const count = db.prepare('SELECT COUNT(*) AS total FROM registry_services s' + where)
       .get(...params).total;
     const items = db.prepare(
-      'SELECT s.*, (SELECT COUNT(*) FROM registry_endpoints e ' +
+      'SELECT s.*, (SELECT COUNT(*) FROM registry_source_links l ' +
+      'WHERE l.docker_service_id = s.id) AS linked_system_count, ' +
+      '(SELECT COUNT(*) FROM registry_endpoints e ' +
       'WHERE e.service_id = s.id) AS endpoint_count, ' +
       '(SELECT e.host_ip FROM registry_endpoints e WHERE e.service_id = s.id ' +
       'ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS preview_host_ip, ' +
@@ -400,6 +419,7 @@ function createServiceRegistry(db) {
     listServices,
     forgetService,
     setPinned,
+    linkDockerProxies: sourceLinks.linkListening,
     markStale,
     getScanStatus,
     reconcileSource: (snapshot) => reconcile(snapshot),
