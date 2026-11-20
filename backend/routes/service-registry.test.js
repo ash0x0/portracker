@@ -69,6 +69,13 @@ describe('registry REST API authorization and validation', () => {
     expect(scanStatus.status).toBe(200);
     expect(await scanStatus.json()).toEqual({ enabled: false, sources: [] });
 
+    const prefix = await fetch(url + '?portPrefix=30');
+    expect(prefix.status).toBe(200);
+    expect((await prefix.json()).total).toBe(1);
+    expect((await fetch(url + '?portPrefix=4')).status).toBe(200);
+    expect((await fetch(url + '?portPrefix=12%25')).status).toBe(400);
+    expect((await fetch(url + '?port=3000&portPrefix=30')).status).toBe(400);
+
     const invalid = await fetch(url + '?limit=1000');
     expect(invalid.status).toBe(400);
 
