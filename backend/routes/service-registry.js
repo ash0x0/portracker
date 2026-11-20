@@ -7,6 +7,7 @@ const { buildRecoveryRecipes } = require('../lib/service-registry/recovery-recip
 function createRegistryRouter(registry, {
   scanEnabled = false, scanner = null, httpStore = null, provenanceStore = null,
   dockerProvenanceStore = null, recoveryNotesStore = null,
+  getCapabilities = null,
 } = {}) {
   const router = express.Router();
 
@@ -66,9 +67,12 @@ function createRegistryRouter(registry, {
 
   router.get('/scan-status', requireAuth, (req, res) => {
     res.set('Cache-Control', 'no-store');
+    const sources = registry.getScanStatus('local');
     res.json({
       enabled: scanEnabled,
-      sources: registry.getScanStatus('local'),
+      sources,
+      ...(typeof getCapabilities === 'function'
+        ? { capabilities: getCapabilities(sources) } : {}),
     });
   });
 
