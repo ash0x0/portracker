@@ -15,8 +15,12 @@ export async function historyHeaderContracts(page) {
   assert.equal(await details.getByRole('button', { name: 'Forget example-service-78' }).count(), 0,
     'Details must not render duplicate nested actions');
   assert.equal(await card.getAttribute('aria-expanded'), 'true');
+  const initialPin = await pin.getAttribute('aria-pressed');
   await pin.click();
   assert.equal(await details.count(), 1, 'Pin must not collapse selected service');
+  await pin.click();
+  assert.equal(await pin.getAttribute('aria-pressed'), initialPin,
+    'Browser fixture pin must be restored for later Pinned scenarios');
   await card.click();
   assert.equal(await details.count(), 0, 'Click selected service again must collapse');
   assert.equal(await card.getAttribute('aria-expanded'), 'false');
