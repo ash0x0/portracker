@@ -51,6 +51,7 @@ export function RegistryPinned({ onBrowseHistory }) {
   const [portText, setPortText] = useState("");
   const [status, setStatus] = useState("");
   const [source, setSource] = useState("");
+  const [lastSeenWindow, setLastSeenWindow] = useState("");
   const [page, setPage] = useState(0);
   const [version, setVersion] = useState(0);
   const [data, setData] = useState({ items: [], total: 0, serviceTotal: 0 });
@@ -94,6 +95,8 @@ export function RegistryPinned({ onBrowseHistory }) {
     getRegistryPinnedGroups({
       serverId: "local", limit: PAGE_SIZE, offset: page * PAGE_SIZE,
       status, source, search, portPrefix,
+      seenSince: lastSeenWindow
+        ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
     }, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       loaded.current = true;
@@ -105,7 +108,7 @@ export function RegistryPinned({ onBrowseHistory }) {
       setLoading(false);
     });
     return () => controller.abort();
-  }, [page, status, source, search, portPrefix, invalidPort, version]);
+  }, [page, status, source, search, portPrefix, invalidPort, lastSeenWindow, version]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -244,7 +247,7 @@ export function RegistryPinned({ onBrowseHistory }) {
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scan && !scan.enabled && <p className="text-sm text-amber-600">Discovery is disabled. Saved pins remain accessible.</p>}
       {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
-      <div aria-label="Pinned filters" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div aria-label="Pinned filters" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <label className="space-y-1 text-sm">
           <span>Name</span>
           <span className="relative block">
@@ -269,6 +272,17 @@ export function RegistryPinned({ onBrowseHistory }) {
             <option value="listening">Listening</option>
             <option value="offline">Offline</option>
             <option value="unknown">Unknown</option>
+          </select>
+        </label>
+        <label className="space-y-1 text-sm">
+          <span>Last seen</span>
+          <select aria-label="Filter pinned last seen" value={lastSeenWindow}
+            onChange={event => { setLastSeenWindow(event.target.value); setPage(0); }}
+            className={FIELD + " w-full"}>
+            <option value="">Any time</option>
+            <option value="1">Past 24 hours</option>
+            <option value="7">Past 7 days</option>
+            <option value="30">Past 30 days</option>
           </select>
         </label>
         <label className="space-y-1 text-sm">
