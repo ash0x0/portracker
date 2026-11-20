@@ -60,6 +60,37 @@ captured metadata remains available in SQLite indefinitely until you
 explicitly forget that history record. This feature does not make stopped
 containers appear to be listening.
 
+## Phase D: Docker discovery enabled by default
+
+The fork's `docker-compose.registry-fork.yml` now **starts a separate
+read-only Docker socket proxy** by default for rootful local Docker. The
+Portracker application accesses only `tcp://docker-api-proxy:2375` over
+an internal, unexposed `docker-monitor` network. The proxy mounts the
+host socket, enforces `POST=0`, `CONTAINERS=1`, `INFO=1` and
+`DISABLE_IPV6=1` for IPv4-only NixOS hosts; the application does not
+mount docker.sock.
+
+The scanner still attempts Docker inventory when the endpoint is unavailable,
+but reports it as `collector_unavailable` without marking native source
+history Offline. The new `capabilities.docker` status distinguishes
+`requested`/`configured` from `available` (a **complete, confirmed
+Docker scan**) and preserves the timestamp of the last known success.
+UI History/Pinned show safe guidance, without leaking private Docker API URLs
+or raw inspection metadata.
+
+Docker container inspect is sensitive **even in read-only mode**: Config.Env
+and Mounts may include secrets available to the monitor process. Do not
+attach arbitrary containers to the private proxy network, expose its port, or
+set `POST=1`. Other Portracker Docker mutation operations are expected
+to fail against this GET-only endpoint.
+
+For rootless Docker, set `PORTRACKER_DOCKER_SOCK` to the actual socket
+path *before* running Compose. If the socket doesn't exist, Compose might
+fail to mount it; start only the `portracker` service with
+`docker compose -f docker-compose.registry-fork.yml up -d --build portracker`
+and native System/HTTP discovery will still operate. See
+[the NixOS guide](service-registry-nixos.md) for details.
+
 ## NixOS and Docker socket access
 
 On NixOS, Compose's working directory is a **path on the Docker host**. The
