@@ -188,29 +188,7 @@ async function applyRegistrySearch(page, search) {
   await page.waitForTimeout(100);
 }
 
-async function registryHistoryNavigation(page, options) {
-  const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
-  await page.route(urlPattern, handleRegistryRequest);
-  try {
-    await page.getByRole('tab', { name: 'History', exact: true }).click();
-    await page.getByRole('heading', { name: 'Service history' }).waitFor();
-    await page.getByText('example-unknown', { exact: true }).waitFor();
-    await page.getByRole('combobox', { name: 'Filter by status' }).selectOption('offline');
-    await applyRegistrySearch(page, 'example');
-    await page.getByText('Page 1 of 5').waitFor();
-    assert.equal(await page.getByText('example-unknown', { exact: true }).count(), 0,
-      'A failed source scan must remain unknown, never appear under offline');
-    await page.getByRole('button', { name: 'Next', exact: true }).click();
-    await page.getByText('Page 2 of 5').waitFor();
-    const dockerCard = page.getByRole('button', { name: /^example-service-78\b/ });
-    await dockerCard.click();
-    assert.equal(await dockerCard.locator('xpath=ancestor::article[1]')
-      .locator('section[aria-label="Saved service details"]').count(), 1,
-    'Expanded details must be mounted inside the selected service card');
-    await page.getByRole('region', { name: 'Docker launch provenance' }).waitFor();
-    await page.getByText('nginx:stable', { exact: true }).waitFor();
-    await page.getByRole('region', { name: 'Recovery information' }).waitFor();
-    await page.getByText('Suggested Docker Compose recovery').waitFor();
+async function recoveryCommandFlow(page) {
     const commandField = page.getByRole('textbox', { name: 'One-line startup command' });
     const commandText = page.getByTestId('registry-start-command-text');
     const originalCommand = "cd -- '/home/dev/demo' && docker compose up -d web";
@@ -250,7 +228,6 @@ async function registryHistoryNavigation(page, options) {
     assert.equal(await commandField.count(), 0, 'Cancel restores plain text');
     assert.equal((await commandText.textContent()).trim(), updatedCommand);
 
-    // A version conflict must keep the draft editable; never claim a successful save.
     const errorRoute = '**/api/service-registry/history-fixture-78/recovery-start';
     await page.route(errorRoute, route => route.fulfill({
       status: 409, contentType: 'application/json',
@@ -268,6 +245,32 @@ async function registryHistoryNavigation(page, options) {
     } finally {
       await page.unroute(errorRoute);
     }
+}
+
+async function registryHistoryNavigation(page, options) {
+  const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
+  await page.route(urlPattern, handleRegistryRequest);
+  try {
+    await page.getByRole('tab', { name: 'History', exact: true }).click();
+    await page.getByRole('heading', { name: 'Service history' }).waitFor();
+    await page.getByText('example-unknown', { exact: true }).waitFor();
+    await page.getByRole('combobox', { name: 'Filter by status' }).selectOption('offline');
+    await applyRegistrySearch(page, 'example');
+    await page.getByText('Page 1 of 5').waitFor();
+    assert.equal(await page.getByText('example-unknown', { exact: true }).count(), 0,
+      'A failed source scan must remain unknown, never appear under offline');
+    await page.getByRole('button', { name: 'Next', exact: true }).click();
+    await page.getByText('Page 2 of 5').waitFor();
+    const dockerCard = page.getByRole('button', { name: /^example-service-78\b/ });
+    await dockerCard.click();
+    assert.equal(await dockerCard.locator('xpath=ancestor::article[1]')
+      .locator('section[aria-label="Saved service details"]').count(), 1,
+    'Expanded details must be mounted inside the selected service card');
+    await page.getByRole('region', { name: 'Docker launch provenance' }).waitFor();
+    await page.getByText('nginx:stable', { exact: true }).waitFor();
+    await page.getByRole('region', { name: 'Recovery information' }).waitFor();
+    await page.getByText('Suggested Docker Compose recovery').waitFor();
+    await recoveryCommandFlow(page);
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
