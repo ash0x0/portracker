@@ -90,6 +90,7 @@ describe('per-service recovery notes and concurrency', () => {
       const registry = createServiceRegistry(db);
       const record = observed(registry);
       createRecoveryNotesStore(db).saveNotes(record.id, 'remember this service', 0, 1000);
+      createRecoveryNotesStore(db).saveStart(record.id, 'pnpm dev', '/home/dev/project', 0, 1000);
       registry.reconcileSource({ source: 'system', complete: true, rows: [], at: 2000 });
       db.close();
 
@@ -101,6 +102,11 @@ describe('per-service recovery notes and concurrency', () => {
           text: 'remember this service', version: 1, updatedAt: 1000,
         });
         expect(after.getService(record.id).status).toBe('offline');
+        const preferred = createRecoveryNotesStore(reopened).getStart(record.id);
+        expect(preferred).toMatchObject({
+          command: 'pnpm dev', cwd: '/home/dev/project', version: 1,
+        });
+        expect(preferred.line).toContain('&& pnpm dev');
       } finally { reopened.close(); }
     } finally { fs.rmSync(dir, { recursive: true, force: true }); }
   });
