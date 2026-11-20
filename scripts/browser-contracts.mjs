@@ -9,6 +9,7 @@ import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
 import { phaseAContracts } from './phase-a-browser-contracts.mjs';
 import { phaseCContracts } from './phase-c-browser-contracts.mjs';
 import { historyHeaderContracts } from './phase-b-browser-contracts.mjs';
+import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
 
 async function assertLayout(page) {
   const dimensions = await page.evaluate(() => ({ width: window.innerWidth, content: document.documentElement.scrollWidth }));
@@ -271,6 +272,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByText('nginx:stable', { exact: true }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByText('Suggested Docker Compose recovery').waitFor();
+    await assertFlatRegistryDetails(page, { docker: true });
     await recoveryCommandFlow(page);
     await historyHeaderContracts(page);
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
@@ -282,6 +284,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('region', { name: 'Linux launch provenance' }).waitFor();
     await page.getByText('dev.service', { exact: true }).waitFor();
     await page.getByText('Start the observed systemd unit').waitFor();
+    await assertFlatRegistryDetails(page, { linux: true });
     await page.getByText('Verified Local Root', { exact: true }).first().waitFor();
     await page.locator('img[src="/api/service-registry/icons/' + 'a'.repeat(64) + '"]').first().waitFor();
     const forget = page.getByRole('button', { name: 'Forget example-service-79' });
