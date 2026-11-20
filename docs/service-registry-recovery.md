@@ -64,6 +64,30 @@ evidence. Review them first, make sure you are on the correct Linux/Docker host,
 and verify the service or config file still exists. On NixOS, starting a unit
 does not declaratively enable that unit or persist a change across rebuilds.
 
+## Preferred one-line startup command (enhancement #28)
+
+Authenticated History details now provide a dedicated **Preferred start command**
+field (up to 2,000 printable characters on a single line) and optional absolute
+**Working directory**. When both are saved, the copy-only display uses a quoted
+one-liner such as `cd -- '/home/dev/my project' && pnpm dev`. User commands
+are entered/confirmed by the user, **never reconstructed from raw process argv**
+or environment. Do not include secrets or credentials.
+
+When no preferred user command exists, the UI highlights an available, trusted
+systemd start or Compose recovery suggestion instead. If an app's invocation
+cannot be proven from observed provenance (e.g. a standalone Python/Node dev
+server), it shows a **Set start command** editor; it does not invent arguments.
+Commands are copied to the browser clipboard, not executed.
+
+- `GET /api/service-registry/:id` exposes `recovery.preferred` only with
+  authenticated recovery opt-in.
+- `PUT /api/service-registry/:id/recovery-start` accepts
+  `{"command":"pnpm dev","cwd":"/home/user/project","version":0}` with
+  separate optimistic concurrency and an HTTP 409 on conflicting edits.
+- Preferred commands survive offline states and logical restarts where the
+  record can be safely reidentified (#26); historical entries with insufficient
+  identity evidence may still require manual linking later.
+
 ## User-authored notes
 
 The service detail view contains a plain-text note editor (4,000 characters
@@ -87,7 +111,7 @@ If clipboard access is unavailable, manually select the command.
 - `DELETE /api/service-registry/:id`: also deletes the saved recovery notes,
   without deleting or stopping any real service.
 
-The per-service notes table is an idempotent SQLite schema v6 addition. Saved
+The notes table was introduced in schema v6 and extended for preferred startup commands in v8. Saved
 notes survive application restarts and offline periods, and do not affect the
 existing live port dashboard or Docker health collection.
 
