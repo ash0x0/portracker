@@ -190,11 +190,31 @@ async function registryHistoryNavigation(page, options) {
       'A failed source scan must remain unknown, never appear under offline');
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByText('Page 2 of 5').waitFor();
-    await page.getByRole('button', { name: /^example-service-78\b/ }).click();
+    const dockerCard = page.getByRole('button', { name: /^example-service-78\b/ });
+    await dockerCard.click();
+    assert.equal(await dockerCard.locator('xpath=ancestor::article[1]').evaluate(element =>
+      element.nextElementSibling?.getAttribute('aria-label')), 'Saved service details',
+    'Expanded details should immediately follow the selected service card');
     await page.getByRole('region', { name: 'Docker launch provenance' }).waitFor();
     await page.getByText('nginx:stable', { exact: true }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByText('Suggested Docker Compose recovery').waitFor();
+    const commandField = page.getByRole('textbox', { name: 'One-line startup command' });
+    assert.equal(await commandField.inputValue(),
+      "cd -- '/home/dev/demo' && docker compose up -d web");
+    assert.equal(await commandField.isEditable(), false);
+    await page.getByRole('button', { name: 'Edit command' }).click();
+    await commandField.fill("cd /home/dev/demo && docker compose up -d web");
+    await page.getByRole('button', { name: 'Save command' }).click();
+    await page.getByText('Preferred startup command saved.').waitFor();
+    assert.equal(await commandField.inputValue(),
+      "cd /home/dev/demo && docker compose up -d web");
+    assert.equal(await commandField.isEditable(), false);
+    await page.getByRole('button', { name: 'Edit command' }).click();
+    await commandField.fill('this should not be saved');
+    await page.getByRole('button', { name: 'Cancel' }).click();
+    assert.equal(await commandField.inputValue(),
+      "cd /home/dev/demo && docker compose up -d web");
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
@@ -206,16 +226,24 @@ async function registryHistoryNavigation(page, options) {
     await page.getByText('Start the observed systemd unit').waitFor();
     await page.getByText('Verified Local Root', { exact: true }).first().waitFor();
     await page.locator('img[src="/api/service-registry/icons/' + 'a'.repeat(64) + '"]').first().waitFor();
-    const forget = page.getByRole('button', { name: 'Forget this history record' });
-    page.once('dialog', dialog => dialog.accept());
+    const forget = page.getByRole('button', { name: 'Forget example-service-79' });
     await forget.click();
-    await page.getByText('Page 1 of 5').waitFor();
+    const confirmation = page.getByRole('dialog', { name: 'Forget saved service?' });
+    await confirmation.waitFor();
+    assert.equal(records.length, 105, 'Opening Forget must not delete any data');
+    await confirmation.getByRole('button', { name: 'Cancel' }).click();
+    assert.equal(records.length, 105, 'Cancelling Forget must leave history intact');
+    await forget.click();
+    await confirmation.getByRole('button', { name: 'Forget service' }).click();
+    await page.getByText('Page 2 of 5').waitFor();
     assert.equal(records.length, 104, 'Forgetting must delete only the selected saved history row');
     await page.screenshot({
       path: path.join(options.artifacts, options.viewport.width + '-history.png'),
       fullPage: true,
       animations: 'disabled',
     });
+    await page.getByRole('button', { name: 'Previous', exact: true }).click();
+    await page.getByText('Page 1 of 5').waitFor();
     await page.getByRole('button', { name: 'Pin example-service-103', exact: true }).click();
     await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
