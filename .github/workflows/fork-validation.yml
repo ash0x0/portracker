@@ -52,6 +52,15 @@ jobs:
           npm run test:release
           npm run test:frontend
 
+      - name: Validate secure Docker Compose defaults
+        env:
+          SESSION_SECRET: ci-only-placeholder-session-secret
+        run: |
+          set -euo pipefail
+          docker compose -f docker-compose.registry-fork.yml config --quiet
+          docker compose -f docker-compose.registry-fork.yml config --format json |
+            node scripts/validate-registry-compose.mjs
+
       - name: Install Playwright Chromium for browser contracts
         run: npx playwright install --with-deps chromium
 
