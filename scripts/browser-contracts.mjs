@@ -185,6 +185,8 @@ function createRegistryHistoryFixture() {
     firstSeenAt: 1730000000000,
     lastSeenAt: 1730000000000 + index * 60000,
     status: index === 104 ? 'unknown' : 'offline',
+    pinned: false,
+    pinnedAt: null,
     previewHostIp: '127.0.0.1',
     previewPort: 3000 + index,
     previewProtocol: 'tcp',
@@ -217,6 +219,16 @@ function createRegistryHistoryFixture() {
         { source: 'system', outcome: 'complete', lastSuccessAt: 1730000000000 },
         { source: 'docker', outcome: 'failed', lastSuccessAt: 1729990000000 },
       ] });
+    }
+    if (req.method() === 'PUT' && suffix.endsWith('/pin')) {
+      const id = decodeURIComponent(suffix.slice(1, -4));
+      const item = records.find(row => row.id === id);
+      if (!item) return json({ error: 'Saved service not found' }, 404);
+      const payload = req.postDataJSON();
+      if (typeof payload?.pinned !== 'boolean') return json({ error: 'Invalid pin' }, 400);
+      item.pinned = payload.pinned;
+      item.pinnedAt = payload.pinned ? (item.pinnedAt ?? 1730000000000) : null;
+      return json({ id, pinned: item.pinned, pinnedAt: item.pinnedAt });
     }
     if (req.method() === 'PUT' && suffix.endsWith('/recovery-notes')) {
       const result = applyRegistryFixtureNote(req, suffix, recoveryNotes);
@@ -255,14 +267,25 @@ function createRegistryHistoryFixture() {
     const source = filters.get('source');
     const status = filters.get('status');
     const port = filters.get('port');
+    const portPrefix = filters.get('portPrefix');
+    const pinnedOnly = filters.get('pinnedOnly') === 'true';
     const since = Number(filters.get('seenSince') || 0);
     const matching = records.filter(row =>
       (!search || row.displayName.toLowerCase().includes(search)) &&
       (!source || row.source === source) &&
       (!status || row.status === status) &&
       (!port || row.previewPort === Number(port)) &&
+      (!portPrefix || String(row.previewPort).startsWith(portPrefix)) &&
+      (!pinnedOnly || row.pinned) &&
       (!since || row.lastSeenAt >= since)
-    ).sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+    ).sort((a, b) => {
+      if (pinnedOnly) {
+        const rank = { offline: 0, unknown: 1, listening: 2 };
+        return rank[a.status] - rank[b.status] ||
+          (b.pinnedAt || 0) - (a.pinnedAt || 0) || b.lastSeenAt - a.lastSeenAt;
+      }
+      return b.lastSeenAt - a.lastSeenAt;
+    });
     const offset = Number(filters.get('offset') || 0);
     const limit = Number(filters.get('limit') || 24);
     return json({ items: matching.slice(offset, offset + limit), total: matching.length, offset, limit });
@@ -311,6 +334,20 @@ async function registryHistoryNavigation(page, options) {
       fullPage: true,
       animations: 'disabled',
     });
+    // Pinned is a first-class tab and uses the same saved logical record.
+    await page.getByRole('button', { name: 'Pin example-service-103', exact: true }).click();
+    await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
+    await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
+    await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
+    assert.equal(await page.getByRole('button', { name: 'example-service-103' }).count(), 1);
+    await page.getByRole('button', { name: 'example-service-103' }).click();
+    await page.getByRole('region', { name: 'Recovery information' }).waitFor();
+    await page.reload();
+    await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
+    await page.getByRole('button', { name: 'Unpin example-service-103' }).click();
+    await page.getByText('No pinned services match these filters.').waitFor();
+    await page.getByRole('button', { name: 'Browse History' }).click();
+    await page.getByRole('heading', { name: 'Service history' }).waitFor();
     await page.getByRole('tab', { name: 'Live ports', exact: true }).click();
     await page.getByPlaceholder('Search ports, processes...').waitFor();
   } finally {
