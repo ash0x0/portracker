@@ -101,6 +101,26 @@ describe('persistent localhost registry storage', () => {
     expect(notes.get(first.id).text).toContain('python3');
   }));
 
+  test('fast restart between complete scans retains one logical record', () => fixture((_db, registry) => {
+    const make = (pid, ticks) => ({
+      ...port({ owner: 'python3', host_port: 4177, pid }),
+      process_start_ticks: ticks,
+      provenance: { kind: 'session_scope', confidence: 'observed', uid: 1000,
+        pid, startTicks: ticks, cwd: '/home/dev/site',
+        executablePath: '/usr/bin/python3' },
+    });
+    registry.reconcileSource({ source: 'system', rows: [make(100, '11')],
+      complete: true, at: 1000 });
+    const original = registry.listServices().items[0];
+    // No scan observed the brief stopped interval; the old record is still Listening.
+    registry.reconcileSource({ source: 'system', rows: [make(200, '22')],
+      complete: true, at: 2000 });
+    expect(registry.listServices().total).toBe(1);
+    expect(registry.getService(original.id)).toMatchObject({
+      status: 'listening', firstSeenAt: 1000, lastSeenAt: 2000, runCount: 2,
+    });
+  }));
+
   test('simultaneous same executable does not merge distinct active processes', () => fixture((_db, registry) => {
     const make = (pid, ticks) => ({ ...port({ owner: 'python', pid, host_port: 4177 }),
       process_start_ticks: ticks,
