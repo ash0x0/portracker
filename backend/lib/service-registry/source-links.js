@@ -5,7 +5,8 @@
 // Only a recent, exact, unique active match is safe to link.
 function createSourceLinks(db) {
   const candidates = db.prepare(
-    'SELECT DISTINCT s.id AS system_id, d.id AS docker_id ' +
+    'SELECT DISTINCT s.id AS system_id, d.id AS docker_id, ' +
+    'se.host_ip, se.host_port, se.protocol ' +
     'FROM registry_services s ' +
     'JOIN registry_endpoints se ON se.service_id = s.id ' +
     'JOIN registry_endpoints de ON de.host_ip = se.host_ip ' +
@@ -36,14 +37,18 @@ function createSourceLinks(db) {
     if (!Number.isSafeInteger(at) || at < 0) throw new TypeError('Invalid correlation time');
     const pairs = candidates.all(at - 120000, at - 120000, at - 120000);
     const systems = new Map();
-    const dockers = new Map();
+    const bindings = new Map();
     for (const pair of pairs) {
-      systems.set(pair.system_id, (systems.get(pair.system_id) || 0) + 1);
-      dockers.set(pair.docker_id, (dockers.get(pair.docker_id) || 0) + 1);
+      const binding = [pair.docker_id, pair.host_ip, pair.host_port, pair.protocol].join('|');
+      if (!systems.has(pair.system_id)) systems.set(pair.system_id, new Set());
+      if (!bindings.has(binding)) bindings.set(binding, new Set());
+      systems.get(pair.system_id).add(pair.docker_id);
+      bindings.get(binding).add(pair.system_id);
     }
     let created = 0;
     for (const pair of pairs) {
-      if (systems.get(pair.system_id) !== 1 || dockers.get(pair.docker_id) !== 1) continue;
+      const binding = [pair.docker_id, pair.host_ip, pair.host_port, pair.protocol].join('|');
+      if (systems.get(pair.system_id).size !== 1 || bindings.get(binding).size !== 1) continue;
       created += insert.run(pair.system_id, pair.docker_id, at).changes;
     }
     return created;
