@@ -33,6 +33,10 @@ describe('optional HTTP metadata worker', () => {
       ['success', 'two', { title: 'Second Site', rootUrl: 'http://127.0.0.1:3001/' }, 2000],
     ]);
     expect(JSON.stringify(calls)).not.toContain('SECRET_HOST_DATA');
+    expect(worker.getStatus()).toMatchObject({
+      lastAttemptAt: 2000, lastSuccessAt: 2000,
+      lastFailureCode: null,
+    });
   });
 
   test('overlapping scan callbacks do not duplicate pending metadata requests', async () => {
