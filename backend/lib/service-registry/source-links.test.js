@@ -117,6 +117,41 @@ describe('safe native docker-proxy and Docker history correlation', () => {
       expect(registry.listServices().total).toBe(2);
     }));
 
+  test('two published ports belonging to one Docker app produce one card', () =>
+    fixture(({ registry, provenance }) => {
+      registry.reconcileSource({
+        source: 'system', complete: true, at: 100000,
+        rows: [makeProxy(4183), makeProxy(4184, { pid: 30002 })],
+      });
+      registry.reconcileSource({
+        source: 'docker', complete: true, at: 100000,
+        rows: [makeDocker(4183), makeDocker(4184)],
+      });
+      const docker = registry.listServices({ source: 'docker' }).items[0];
+      provenance.record(docker.id, evidence(), 100000);
+      expect(registry.linkDockerProxies(100000)).toBe(2);
+      expect(registry.listServices().total).toBe(1);
+      expect(registry.listServices({ source: 'system' }).total).toBe(2);
+      expect(registry.getService(docker.id).endpoints.map(e => e.hostPort).sort())
+        .toEqual([4183, 4184]);
+    }));
+
+  test('one Docker binding with multiple native proxy owners stays unlinked', () =>
+    fixture(({ registry, provenance }) => {
+      registry.reconcileSource({
+        source: 'system', complete: true, at: 100000,
+        rows: [makeProxy(4183), makeProxy(4183, { pid: 30002 })],
+      });
+      registry.reconcileSource({
+        source: 'docker', complete: true, at: 100000,
+        rows: [makeDocker()],
+      });
+      const docker = registry.listServices({ source: 'docker' }).items[0];
+      provenance.record(docker.id, evidence(), 100000);
+      expect(registry.linkDockerProxies(100000)).toBe(0);
+      expect(registry.listServices().total).toBe(3);
+    }));
+
   test('two Docker IDs on same endpoint are ambiguous and must not be linked', () =>
     fixture(({ registry, provenance }) => {
       registry.reconcileSource({
