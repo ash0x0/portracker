@@ -1,3 +1,4 @@
+import { RegistryCapabilities } from "./RegistryCapabilities";
 import { RegistryServiceDetails, StatusBadge } from "./RegistryServiceDetails";
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -247,6 +248,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       </div>
 
       <ScanSummary scan={scan} />
+      <RegistryCapabilities scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
       {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
