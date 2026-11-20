@@ -21,7 +21,6 @@ async function assertLayout(page) {
     assert(bounds.x + bounds.width <= dimensions.width + 1, 'Dialog exceeds viewport');
   }
 }
-
 async function signIn(page, credentials) {
   await page.getByLabel('Username', { exact: true }).fill(credentials.username);
   await page.getByLabel('Password', { exact: true }).fill('incorrect');
@@ -248,7 +247,6 @@ async function recoveryCommandFlow(page) {
       await page.unroute(errorRoute);
     }
 }
-
 async function registryHistoryNavigation(page, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
@@ -326,7 +324,6 @@ async function registryHistoryNavigation(page, options) {
     await page.unroute(urlPattern, handleRegistryRequest);
   }
 }
-
 async function viewportContract(browser, options) {
   const context = await browser.newContext({ viewport: options.viewport, reducedMotion: 'reduce' });
   const page = await context.newPage();
