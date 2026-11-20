@@ -1,8 +1,9 @@
-import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
-import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
-import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
+import { RegistryServiceDetails, StatusBadge } from "./RegistryServiceDetails";
+import {
+  Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
+} from "@/components/ui/dialog";
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { History, Pin, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
+import { History, Pin, RefreshCw, ScanSearch, Search } from "lucide-react";
 import {
   getRegistryService,
   getRegistryServices,
@@ -12,25 +13,10 @@ import {
   forgetRegistryService,
 } from "../../lib/api/serviceRegistry";
 import {
-  PAGE_SIZE, parseRegistryPortPrefix, registryPageCount,
-  registryStatusLabel, registryTimestamp,
+  PAGE_SIZE, parseRegistryPortPrefix, registryPageCount, registryTimestamp,
 } from "../../lib/registry-utils.mjs";
 
-const STATUS_CLASSES = {
-  listening: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300",
-  offline: "bg-slate-200 text-slate-800 dark:bg-slate-700 dark:text-slate-200",
-  unknown: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300",
-};
 const FIELD_CLASS = "rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm";
-
-function StatusBadge({ status }) {
-  return (
-    <span className={"rounded-full px-2.5 py-1 text-xs font-semibold " +
-      (STATUS_CLASSES[status] || STATUS_CLASSES.unknown)}>
-      {registryStatusLabel(status)}
-    </span>
-  );
-}
 
 function ScanSummary({ scan }) {
   if (!scan) return null;
@@ -73,6 +59,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState("");
   const [forgetting, setForgetting] = useState(false);
+  const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
@@ -182,20 +169,29 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
 
   const handleForget = useCallback(async () => {
     if (!selectedId || forgetting) return;
-    if (!window.confirm("Permanently forget this saved history record? The running service will not be stopped.")) return;
     setForgetting(true);
     setDetailError("");
     try {
       await forgetRegistryService(selectedId);
+      setData(previous => ({
+        ...previous,
+        items: previous.items.filter(item => item.id !== selectedId),
+        total: Math.max(0, previous.total - 1),
+      }));
       setSelectedId(null);
-      setPage(0);
-      refresh();
+      setDetail(null);
+      setForgetDialogOpen(false);
+      if (data.items.length <= 1 && page > 0) {
+        setPage(previous => Math.max(0, previous - 1));
+      } else {
+        refresh();
+      }
     } catch (err) {
       setDetailError(err.message || "Unable to forget saved service");
     } finally {
       setForgetting(false);
     }
-  }, [selectedId, forgetting, refresh]);
+  }, [selectedId, forgetting, data.items.length, page, refresh]);
 
   const pages = registryPageCount(data.total);
 
@@ -301,10 +297,14 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       {!invalidPort && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {data.items.map(service => (
-            <article key={service.id}
+            <React.Fragment key={service.id}>
+            <article
               className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
               <div className="flex items-start gap-3">
-                <button type="button" onClick={() => setSelectedId(service.id)}
+                <button type="button" onClick={() => {
+                  setForgetDialogOpen(false);
+                  setSelectedId(previous => previous === service.id ? null : service.id);
+                }}
                   aria-pressed={selectedId === service.id}
                   className="min-w-0 flex-1 text-left space-y-2 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
               <div className="flex items-start justify-between gap-2">
@@ -353,6 +353,18 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
                 </button>
               </div>
             </article>
+            {selectedId === service.id && (
+              <RegistryServiceDetails
+                detail={detail?.id === service.id ? detail : null}
+                detailError={detailError}
+                onPinToggle={handlePinToggle}
+                onForget={() => setForgetDialogOpen(true)}
+                onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }}
+                pinBusy={Boolean(pinBusyId)}
+                forgetting={forgetting}
+              />
+            )}
+            </React.Fragment>
           ))}
         </div>
       )}
@@ -367,93 +379,28 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
         </nav>
       )}
 
-      {selectedId && (
-        <section aria-label="Saved service details" className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3">
-          <div className="flex justify-between gap-3 items-center">
-            <h2 className="font-semibold text-lg text-slate-900 dark:text-white">Saved service details</h2>
-            <div className="flex items-center gap-2">
-              {detail && (
-                <button type="button" onClick={() => handlePinToggle(detail)}
-                  disabled={Boolean(pinBusyId)}
-                  aria-label={detail.pinned ? "Unpin selected service" : "Pin selected service"}
-                  aria-pressed={detail.pinned}
-                  className={FIELD_CLASS + " inline-flex gap-2 items-center disabled:opacity-50"}>
-                  <Pin className="w-4 h-4" fill={detail.pinned ? "currentColor" : "none"} />
-                  {detail.pinned ? "Unpin" : "Pin"}
-                </button>
-              )}
-              <button type="button" aria-label="Close saved service details" onClick={() => setSelectedId(null)}
-                className={FIELD_CLASS}><X className="w-4 h-4" /></button>
-            </div>
-          </div>
-          {detailError && <p role="alert" className="text-red-600 text-sm">{detailError}</p>}
-          {!detail && !detailError && <p role="status">Loading details…</p>}
-          {detail && (
-            <>
-              <div className="flex flex-wrap gap-2 items-center">
-                {detail.iconHash && (
-                  <img alt="" loading="lazy" width="28" height="28"
-                    className="w-7 h-7 object-contain"
-                    src={"/api/service-registry/icons/" + detail.iconHash} />
-                )}
-                <strong>{detail.displayName}</strong>
-                <StatusBadge status={detail.status} />
-                <span className="text-xs text-slate-500">{detail.identityConfidence} identity</span>
-              </div>
-              {detail.httpTitle && (
-                <p className="font-medium text-sm">{detail.httpTitle}</p>
-              )}
-              {detail.httpRootUrl && (
-                <p className="text-xs text-slate-600 dark:text-slate-300">
-                  HTTP root seen at{" "}
-                  <a className="underline hover:text-indigo-600" href={detail.httpRootUrl}
-                    target="_blank" rel="noopener noreferrer">
-                    {detail.httpRootUrl}
-                  </a>
-                  {" "}(may only be reachable from the Portracker host)
-                </p>
-              )}
-              {detail.metadataFetchedAt && (
-                <p className="text-xs text-slate-500">
-                  Page metadata collected {registryTimestamp(detail.metadataFetchedAt)}
-                </p>
-              )}
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                First seen {registryTimestamp(detail.firstSeenAt)} · Last seen {registryTimestamp(detail.lastSeenAt)}
-              </p>
-              {detail.runCount > 1 && (
-                <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Observed process runs: {detail.runCount} (logical service retained across restarts)
-                </p>
-              )}
-              <RegistryLinuxProvenance evidence={detail.linuxProvenance} />
-              <RegistryDockerProvenance evidence={detail.dockerProvenance} />
-              {detail.recovery && (
-                <RegistryRecoveryDetails key={detail.id}
-                  serviceId={detail.id} recovery={detail.recovery} />
-              )}
-              <h3 className="font-medium text-sm">Remembered endpoints</h3>
-              <ul className="list-disc pl-5 text-sm space-y-1 text-slate-600 dark:text-slate-300">
-                {detail.endpoints.slice(0, 20).map(ep => (
-                  <li key={ep.id}>{ep.hostIp}:{ep.hostPort}/{ep.protocol} · {ep.source}
-                    {" · "}Last seen {registryTimestamp(ep.lastSeenAt)}</li>
-                ))}
-              </ul>
-              {detail.endpoints.length > 20 && (
-                <p className="text-sm text-slate-500">Showing the 20 most recently seen endpoints.</p>
-              )}
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Title/favicon are captured from the HTTP root when enabled. Linux provenance and copy-only recovery suggestions require authenticated opt-in; no commands are executed.
-              </p>
-              <button type="button" disabled={forgetting} onClick={handleForget}
-                className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm border border-red-300 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50">
-                <Trash2 className="w-4 h-4" aria-hidden="true" />
-                {forgetting ? "Forgetting…" : "Forget this history record"}
-              </button>
-            </>
-          )}
-        </section>
-      )}
+      <Dialog open={forgetDialogOpen} onOpenChange={open => {
+        if (!forgetting) setForgetDialogOpen(open);
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Forget saved service?</DialogTitle>
+            <DialogDescription>
+              Forget {detail?.displayName || "this service"} permanently? This deletes its saved
+              history, pins, recovery notes and metadata. It does not stop the running service.
+            </DialogDescription>
+          </DialogHeader>
+          {detailError && <p role="alert" className="text-sm text-red-600">{detailError}</p>}
+          <DialogFooter>
+            <button type="button" disabled={forgetting} onClick={() => setForgetDialogOpen(false)}
+              className={FIELD_CLASS}>Cancel</button>
+            <button type="button" disabled={forgetting} onClick={handleForget}
+              className="rounded-lg bg-red-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+              {forgetting ? "Forgetting…" : "Forget service"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </section>
   );
 }
