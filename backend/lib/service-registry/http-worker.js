@@ -21,6 +21,7 @@ function createHttpMetadataWorker({
   }
 
   let running = null;
+  const status = { lastAttemptAt: null, lastSuccessAt: null, lastFailureCode: null };
   async function enrich() {
     if (!enabled || !host) return { attempted: 0 };
     if (running) return running;
@@ -31,8 +32,11 @@ function createHttpMetadataWorker({
         const batch = candidates.slice(cursor, cursor + concurrency);
         await Promise.all(batch.map(async ({ service_id: serviceId, host_port: port }) => {
           try {
+            status.lastAttemptAt = now();
             const data = await probe({ host, port });
             store.recordSuccess(serviceId, data, now());
+            status.lastSuccessAt = now();
+            status.lastFailureCode = null;
           } catch (error) {
             // Only stable, allowlisted categories are saved; raw errors may
             // contain private host paths or URLs and are never exposed.
@@ -40,6 +44,7 @@ function createHttpMetadataWorker({
               'external_redirect', 'tls_untrusted', 'blocked_target'].includes(error?.code)
               ? error.code : 'network_error';
             store.recordFailure(serviceId, now(), category);
+            status.lastFailureCode = category;
           } finally {
             completed++;
           }
@@ -55,7 +60,7 @@ function createHttpMetadataWorker({
     } finally { running = null; }
   }
 
-  return { enrich };
+  return { enrich, getStatus: () => ({ ...status }) };
 }
 
 module.exports = { createHttpMetadataWorker };
