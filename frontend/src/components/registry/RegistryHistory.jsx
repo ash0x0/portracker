@@ -119,9 +119,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
     const controller = new AbortController();
     getRegistryScanStatus(controller.signal).then(result => {
       if (!controller.signal.aborted) setScan(result);
-    }).catch(() => {
-      // The saved registry list remains usable without live scan status.
-    });
+    }).catch(() => undefined);
     return () => controller.abort();
   }, [version]);
 
