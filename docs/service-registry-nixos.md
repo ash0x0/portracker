@@ -15,7 +15,9 @@ checks below. Passing CI is not a claim that a real NixOS host was tested.
 From a checkout of this fork:
 
 1. Back up your existing Portracker database.
-2. Generate a session secret in the calling shell:
+2. Export your session secret in the calling shell. **On an existing installation,
+   reuse the original secret**, otherwise old sessions will be invalidated.
+   On a new installation only, generate one and save it securely:
 
        export SESSION_SECRET="$(openssl rand -hex 32)"
 
@@ -35,16 +37,50 @@ retain the original publicly bound port and elevated capabilities.
 
 The fork file builds from this checkout, persists ./portracker-data, binds
 port 4999 **only on 127.0.0.1**, requires authentication, and enables
-historical scans, Linux metadata and recovery notes. It does not mount
-docker.sock by default, so Docker provenance is unavailable until explicitly
-configured. HTTP probing also stays disabled until an explicit reachable
-private-IP host is configured (see the HTTP metadata guide).
+historical scans, Linux metadata and recovery notes. Phase D enables bounded
+HTTP root title/favicon enrichment by default and automatically selects a
+validated private numeric bridge gateway from the container routing table.
+Docker inventory is attempted by default via a **separate restricted
+Docker socket proxy**, connected over a private internal-only network.
+Portracker itself never mounts the Docker socket; the proxy has no published
+port and only permits GET/HEAD API requests.
 
-**Security warning:** mounting docker.sock with :ro does NOT make the
-Docker API read-only. A process with socket access can issue mutating Docker
-requests and gain host privileges. Prefer a carefully restricted socket
-proxy exposing only required read endpoints. Never publish that proxy on
-an untrusted network. The registry itself does not need Docker write access.
+If the proxy fails or Docker is not accessible, Portracker's web UI and
+native System history continue operating. **History/Pinned → Discovery
+capabilities** distinguishes configured probes from confirmed success and
+provides a safe failure reason. HTTP metadata failures do not delete cached
+favicons or titles, and Docker failure never falsely closes native services.
+
+**Security warning:** mounting docker.sock with :ro does NOT make its API
+read-only. Only the separate `docker-api-proxy` has the real socket; the
+proxy enforces `POST=0`, `CONTAINERS=1`, `INFO=1`,
+`DISABLE_IPV6=1`, and is attached only to Docker's `internal: true`
+monitoring network. The proxy still exposes sensitive read-only Docker
+inspection metadata (possibly environment variables/mounts) **to the trusted
+Portracker process**. Do not put untrusted containers on that network,
+publish port 2375, or enable `POST=1`. The application's other Docker
+write operations may be rejected by the read-only proxy; this is intentional
+for this secure discovery deployment.
+
+**Docker socket missing / rootless:** The default proxy bind source is
+`/var/run/docker.sock`. For a rootless daemon, export your actual local
+socket path before Compose, e.g.:
+
+    export PORTRACKER_DOCKER_SOCK="$XDG_RUNTIME_DIR/docker.sock"
+
+If no socket exists at all, the proxy may fail to start (or Compose may
+report a bind error). **Start only the monitor**, without weakening security:
+
+    docker compose -f docker-compose.registry-fork.yml up -d --build portracker
+
+The UI, native history, and safe HTTP enrichment still run; Docker capability
+shows unavailable. When a socket becomes available, run the full Compose
+command to start the proxy. Existing Phase 7 temporary overlay
+`/tmp/portracker-phase7.override.yml` is no longer required; do **not**
+combine it with this standalone fork file during regular upgrades. Explicitly
+opt out of HTTP probes with `SERVICE_REGISTRY_HTTP_ENABLED=false` in the
+calling shell or override the gateway with a verified private numeric
+`SERVICE_REGISTRY_HTTP_HOST`. No firewall/global network rules are changed.
 
 This Compose file uses pid: host, a read-only host /proc bind mount and
 SYS_PTRACE, but not SYS_ADMIN or unconfined AppArmor. The Docker network
@@ -191,8 +227,9 @@ TLS-untrusted or client-side-rendered apps without meaning the port is down.
 
       sqlite3 portracker.sqlite ".backup 'pre-upgrade.sqlite'"
 
-- History database migrations are additive schema versions 1 through 6.
-  Automatic schema downgrades are not implemented. Keep the pre-upgrade
+- History database migrations are additive schema versions 1 through 10
+  (including durable pins and source-owned Docker proxy correlations).
+  Automatic schema downgrades are not implemented. Keep a verified pre-upgrade
   backup if you might run an older binary.
 - Active cached raster icon payloads are capped at 128 distinct images
   of at most 128 KiB each (maximum 16 MiB before SQLite/WAL overhead).

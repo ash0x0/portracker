@@ -5,24 +5,42 @@ real `<title>` and a small same-origin favicon for previously discovered TCP
 services. Unlike recognized dashboard logos, these values come from the local
 service's own HTTP response and survive its shutdown in SQLite.
 
-## Opt in
+## Default-on HTTP metadata (Phase D / issue #39)
+
+**Enabled by default** when the saved registry is enabled. `SERVICE_REGISTRY_HTTP_ENABLED=false`
+turns probing off explicitly. Each observed *likely-HTTP* local port is
+probed conservatively; there are no browser credentials or arbitrary URLs.
+
+Native Linux uses `127.0.0.1`. Inside a Docker bridge, the backend reads
+`/proc/net/route`, selects a valid **private numeric** IPv4 default gateway
+(without DNS, hard-coded `172.17.0.1` guesses, or falling back to
+container loopback), and only probes the host through that gateway. If the
+route is missing, ambiguous, public or otherwise untrusted, metadata enrichment
+is **unavailable** and TCP discovery continues normally. A host firewall or a
+service bound *only* to `127.0.0.1` can still block container-to-host access;
+Portracker does **not** disable the firewall or broaden the target's binding.
+
+The fork's Compose now defaults to:
 
 ```env
 SERVICE_REGISTRY_ENABLED=true
 SERVICE_REGISTRY_HTTP_ENABLED=true
-# Native Linux: HTTP probes use 127.0.0.1 by default.
-# When running inside Docker, specify an explicit reachable private host IP:
-SERVICE_REGISTRY_HTTP_HOST=172.17.0.1
+# Optional explicit private numeric IP for special networking:
+# SERVICE_REGISTRY_HTTP_HOST=172.18.0.1
 ```
 
-Set these on the *Portracker backend*, not inside a browser's localStorage.
-Restart after changing them. By default **no HTTP probing occurs**. The
-additional host setting is required inside Docker: `127.0.0.1` inside a
-bridge-mode container refers to the container, not your NixOS host. The
-configured IP must be an explicit private/loopback address; DNS names,
-link-local addresses (including cloud metadata IPs), and public IPs are
-rejected. A service bound only to host loopback may remain unreachable from a
-Docker bridge despite `pid: host`.
+The default automatic gateway detection can be overridden by an explicit
+private literal via `SERVICE_REGISTRY_HTTP_HOST`. A public IP, link-local
+cloud metadata IP, hostname or IPv6 zone ID is rejected. Invalid configuration
+never crashes the app: the registry runs without HTTP enrichment and surfaces
+a sanitized reason in **History / Pinned → Discovery capabilities**.
+
+The status API `GET /api/service-registry/scan-status` now reports
+`capabilities.http`: `requested`, `configured` (safe target selected),
+`available` (confirmed successful probe; null until a probe is attempted),
+host `mode` (without exposing the IP), safe `reason`, and last attempt/
+success and failure categories. Having a private route is **not** proof the
+host webserver can be reached.
 
 The scanner examines a bounded number of recently observed listening TCP
 endpoints after each successful scan and retries failures after five minutes;

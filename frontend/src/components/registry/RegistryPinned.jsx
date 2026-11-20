@@ -1,3 +1,4 @@
+import { RegistryCapabilities } from "./RegistryCapabilities";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Pin, RefreshCw, ScanSearch, Search } from "lucide-react";
 import {
@@ -244,6 +245,7 @@ export function RegistryPinned({ onBrowseHistory }) {
           </button>
         </div>
       </div>
+      <RegistryCapabilities scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scan && !scan.enabled && <p className="text-sm text-amber-600">Discovery is disabled. Saved pins remain accessible.</p>}
       {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}

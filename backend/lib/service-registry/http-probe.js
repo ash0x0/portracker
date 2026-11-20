@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const http = require('node:http');
 const https = require('node:https');
 const { iconMime } = require('./http-store');
+const { detectDockerGateway } = require('./http-gateway');
 
 const trusted = new net.BlockList();
 trusted.addSubnet('127.0.0.0', 8, 'ipv4');
@@ -22,14 +23,29 @@ function allowedHost(host) {
   return Boolean(type && trusted.check(host, type === 4 ? 'ipv4' : 'ipv6'));
 }
 
-function readHttpMetadataConfig(env = process.env, dockerized = fs.existsSync('/.dockerenv')) {
-  const enabled = env.SERVICE_REGISTRY_HTTP_ENABLED === 'true';
-  const supplied = env.SERVICE_REGISTRY_HTTP_HOST;
-  const host = supplied || (dockerized ? null : '127.0.0.1');
-  if (enabled && supplied && (!allowedHost(supplied) || supplied.includes('%'))) {
+function readHttpMetadataConfig(env = process.env, dockerized = fs.existsSync('/.dockerenv'),
+  discoverGateway = detectDockerGateway) {
+  const value = env.SERVICE_REGISTRY_HTTP_ENABLED;
+  if (value !== undefined && value !== 'true' && value !== 'false') {
+    throw new TypeError('SERVICE_REGISTRY_HTTP_ENABLED must be true or false');
+  }
+  const requested = value !== 'false';
+  const supplied = (env.SERVICE_REGISTRY_HTTP_HOST || '').trim();
+  if (requested && supplied && (!allowedHost(supplied) || supplied.includes('%'))) {
     throw new TypeError('SERVICE_REGISTRY_HTTP_HOST must be a private/loopback IP literal');
   }
-  return { enabled: enabled && Boolean(host), host, missingHost: enabled && !host };
+  const detected = requested && dockerized && !supplied ? discoverGateway() : null;
+  // Never fall back to the container's loopback for host-side services.
+  const host = supplied || (dockerized ? detected : '127.0.0.1');
+  const validHost = Boolean(host && allowedHost(host));
+  const enabled = requested && validHost;
+  const mode = !requested ? 'disabled' : supplied ? 'explicit' :
+    dockerized ? 'docker_gateway' : 'native_loopback';
+  return {
+    requested, enabled, host: enabled ? host : null, mode,
+    missingHost: requested && !validHost,
+    reason: !requested ? 'disabled_by_user' : !validHost ? 'gateway_unavailable' : null,
+  };
 }
 
 function cleanText(value) {

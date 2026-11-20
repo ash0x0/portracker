@@ -32,17 +32,38 @@ describe('explicit local-host probe policy', () => {
     }
   });
 
-  test('HTTP enrichment is separate opt-in and Docker requires explicit trusted gateway', () => {
-    expect(readHttpMetadataConfig({}, false)).toEqual({
-      enabled: false, host: '127.0.0.1', missingHost: false,
+  test('HTTP enrichment defaults on, selects safe private gateway, and degrades gracefully', () => {
+    expect(readHttpMetadataConfig({}, false)).toMatchObject({
+      requested: true, enabled: true, host: '127.0.0.1', mode: 'native_loopback',
+      missingHost: false, reason: null,
     });
-    expect(readHttpMetadataConfig({ SERVICE_REGISTRY_HTTP_ENABLED: 'true' }, true))
-      .toMatchObject({ enabled: false, host: null, missingHost: true });
+    expect(readHttpMetadataConfig({}, true, () => '172.18.0.1')).toMatchObject({
+      requested: true, enabled: true, host: '172.18.0.1', mode: 'docker_gateway',
+      missingHost: false,
+    });
+    expect(readHttpMetadataConfig({}, true, () => null)).toMatchObject({
+      requested: true, enabled: false, host: null, missingHost: true,
+      reason: 'gateway_unavailable',
+    });
+    expect(readHttpMetadataConfig({}, true, () => '8.8.8.8')).toMatchObject({
+      requested: true, enabled: false, host: null, missingHost: true,
+      reason: 'gateway_unavailable',
+    });
     expect(readHttpMetadataConfig({
       SERVICE_REGISTRY_HTTP_ENABLED: 'true', SERVICE_REGISTRY_HTTP_HOST: '172.17.0.1',
-    }, true)).toMatchObject({ enabled: true, host: '172.17.0.1' });
+    }, true, () => { throw new Error('auto-detect must not run'); })).toMatchObject({
+      enabled: true, host: '172.17.0.1', mode: 'explicit',
+    });
+    expect(readHttpMetadataConfig({
+      SERVICE_REGISTRY_HTTP_ENABLED: 'false',
+      SERVICE_REGISTRY_HTTP_HOST: '169.254.169.254',
+    }, true)).toMatchObject({ requested: false, enabled: false, host: null,
+      reason: 'disabled_by_user' });
     expect(() => readHttpMetadataConfig({
       SERVICE_REGISTRY_HTTP_ENABLED: 'true', SERVICE_REGISTRY_HTTP_HOST: '169.254.169.254',
+    }, false)).toThrow();
+    expect(() => readHttpMetadataConfig({
+      SERVICE_REGISTRY_HTTP_ENABLED: 'yes',
     }, false)).toThrow();
   });
 
