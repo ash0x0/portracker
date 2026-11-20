@@ -21,7 +21,8 @@ function createHttpMetadataWorker({
   }
 
   let running = null;
-  const status = { lastAttemptAt: null, lastSuccessAt: null, lastFailureCode: null };
+  const status = { lastAttemptAt: null, lastSuccessAt: null,
+    lastIconSuccessAt: null, lastFailureCode: null };
   async function enrich() {
     if (!enabled || !host) return { attempted: 0 };
     if (running) return running;
@@ -34,8 +35,9 @@ function createHttpMetadataWorker({
           try {
             status.lastAttemptAt = now();
             const data = await probe({ host, port });
-            store.recordSuccess(serviceId, data, now());
+            const saved = store.recordSuccess(serviceId, data, now());
             status.lastSuccessAt = now();
+            if (saved?.iconHash && data.iconBytes) status.lastIconSuccessAt = now();
             status.lastFailureCode = null;
           } catch (error) {
             // Only stable, allowlisted categories are saved; raw errors may
