@@ -189,7 +189,7 @@ async function registryHistoryNavigation(page, options) {
       'A failed source scan must remain unknown, never appear under offline');
     await page.getByRole('button', { name: 'Next', exact: true }).click();
     await page.getByText('Page 2 of 5').waitFor();
-    await page.getByRole('button', { name: /^example-service-78\\b/ }).click();
+    await page.getByRole('button', { name: /^example-service-78\b/ }).click();
     await page.getByRole('region', { name: 'Docker launch provenance' }).waitFor();
     await page.getByText('nginx:stable', { exact: true }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
@@ -197,7 +197,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
-    await page.getByRole('button', { name: /^example-service-79\\b/ })
+    await page.getByRole('button', { name: /^example-service-79\b/ })
       .dispatchEvent('click');
     await page.getByText('Remembered endpoints').waitFor();
     await page.getByRole('region', { name: 'Linux launch provenance' }).waitFor();
@@ -219,8 +219,8 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /^example-service-103\\b/ }).count(), 1);
-    await page.getByRole('button', { name: /^example-service-103\\b/ }).click();
+    assert.equal(await page.getByRole('button', { name: /^example-service-103\b/ }).count(), 1);
+    await page.getByRole('button', { name: /^example-service-103\b/ }).click();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.reload();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
