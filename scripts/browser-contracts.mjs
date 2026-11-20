@@ -212,16 +212,26 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByText('Suggested Docker Compose recovery').waitFor();
     const commandField = page.getByRole('textbox', { name: 'One-line startup command' });
-    assert.equal(await commandField.inputValue(),
-      "cd -- '/home/dev/demo' && docker compose up -d web");
-    assert.equal(await commandField.isEditable(), false);
+    const commandText = page.getByTestId('registry-start-command-text');
+    const originalCommand = "cd -- '/home/dev/demo' && docker compose up -d web";
+    const updatedCommand = 'cd /home/dev/demo && docker compose up -d web';
+    assert.equal(await commandField.count(), 0,
+      'Read mode must not mount an input, even readOnly');
+    assert.equal((await commandText.textContent()).trim(), originalCommand);
+
     await page.getByRole('button', { name: 'Edit command' }).click();
-    await commandField.fill("cd /home/dev/demo && docker compose up -d web");
+    await commandField.waitFor();
+    assert.equal(await commandField.isEditable(), true);
+    assert.equal(await commandField.inputValue(), originalCommand,
+      'Edit must begin with exactly the displayed legacy cwd/command line');
+    assert.equal(await commandText.count(), 0, 'Edit replaces text with one input');
+    await commandField.fill(updatedCommand);
     await page.getByRole('button', { name: 'Save command' }).click();
     await page.getByText('Preferred startup command saved.').waitFor();
-    assert.equal(await commandField.inputValue(),
-      "cd /home/dev/demo && docker compose up -d web");
-    assert.equal(await commandField.isEditable(), false);
+    assert.equal(await commandField.count(), 0,
+      'After Save the command must be ordinary text, not a readOnly input');
+    assert.equal((await commandText.textContent()).trim(), updatedCommand);
+
     await page.evaluate(() => {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
@@ -231,12 +241,33 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('button', { name: 'Copy start command' }).click();
     await page.getByText('Command copied. Review it before running on the correct host.').waitFor();
     assert.equal(await page.evaluate(() => window.__registryCopiedCommand),
-      "cd /home/dev/demo && docker compose up -d web");
+      (await commandText.textContent()).trim(),
+      'Copy must match the exact displayed read-only command');
+
     await page.getByRole('button', { name: 'Edit command' }).click();
     await commandField.fill('this should not be saved');
     await page.getByRole('button', { name: 'Cancel' }).click();
-    assert.equal(await commandField.inputValue(),
-      "cd /home/dev/demo && docker compose up -d web");
+    assert.equal(await commandField.count(), 0, 'Cancel restores plain text');
+    assert.equal((await commandText.textContent()).trim(), updatedCommand);
+
+    // A version conflict must keep the draft editable; never claim a successful save.
+    const errorRoute = '**/api/service-registry/history-fixture-78/recovery-start';
+    await page.route(errorRoute, route => route.fulfill({
+      status: 409, contentType: 'application/json',
+      body: JSON.stringify({ error: 'Synthetic preferred command conflict' }),
+    }));
+    try {
+      await page.getByRole('button', { name: 'Edit command' }).click();
+      await commandField.fill('retain this draft on conflict');
+      await page.getByRole('button', { name: 'Save command' }).click();
+      await page.getByText('Synthetic preferred command conflict', { exact: true }).waitFor();
+      assert.equal(await commandField.inputValue(), 'retain this draft on conflict');
+      await page.getByRole('button', { name: 'Cancel' }).click();
+      assert.equal(await commandField.count(), 0);
+      assert.equal((await commandText.textContent()).trim(), updatedCommand);
+    } finally {
+      await page.unroute(errorRoute);
+    }
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
