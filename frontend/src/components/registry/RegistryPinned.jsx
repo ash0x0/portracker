@@ -154,8 +154,12 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = scrollSnapshot(root.current);
     try {
       await setRegistryServicePinned(service.id, false);
+      const group = data.items.find(item =>
+        item.services.some(member => member.id === service.id));
+      const next = group?.services.find(member => member.id !== service.id);
       setData(previous => withoutPinnedService(previous, service.id));
-      setSelectedId(null);
+      setSelectedId(next?.id || null);
+      if (!next) setExpandedGroupId(null);
       setDetail(null);
       setPinError("");
       if (data.items.length === 1 && data.items[0].services.length === 1 && page > 0) {
@@ -178,8 +182,12 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = scrollSnapshot(root.current);
     try {
       await forgetRegistryService(selectedId);
+      const group = data.items.find(item =>
+        item.services.some(member => member.id === selectedId));
+      const next = group?.services.find(member => member.id !== selectedId);
       setData(previous => withoutPinnedService(previous, selectedId));
-      setSelectedId(null);
+      setSelectedId(next?.id || null);
+      if (!next) setExpandedGroupId(null);
       setDetail(null);
       setForgetDialogOpen(false);
       if (data.items.length === 1 && data.items[0].services.length === 1 && page > 0) {
