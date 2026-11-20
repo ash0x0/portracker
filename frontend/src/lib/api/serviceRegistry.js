@@ -36,6 +36,14 @@ export function scanRegistryNow() {
   return request(`${BASE}/scan`, { method: "POST" });
 }
 
+export function setRegistryServicePinned(id, pinned) {
+  return request(`${BASE}/${encodeURIComponent(id)}/pin`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ pinned }),
+  });
+}
+
 export function forgetRegistryService(id) {
   return request(`${BASE}/${encodeURIComponent(id)}`, { method: "DELETE" });
 }
