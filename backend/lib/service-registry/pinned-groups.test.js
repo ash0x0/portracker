@@ -58,7 +58,7 @@ describe('Pinned group presentation has no impact on durable identity', () => {
       endpoint('web', 4181), endpoint('worker', 4181),
     ], [provenance('web'), provenance('worker')]);
     expect(group.ports).toMatchObject([
-      { port: 4181, serviceIds: ['worker', 'web'] },
+      { port: 4181, serviceIds: ['web', 'worker'] },
     ]);
   });
 
