@@ -235,6 +235,7 @@ async function registryHistoryNavigation(page, options) {
     assert.equal(records.length, 105, 'Cancelling Forget must leave history intact');
     await forget.click();
     await confirmation.getByRole('button', { name: 'Forget service' }).click();
+    await confirmation.waitFor({ state: 'hidden' });
     await page.getByText('Page 2 of 5').waitFor();
     assert.equal(records.length, 104, 'Forgetting must delete only the selected saved history row');
     await page.screenshot({
