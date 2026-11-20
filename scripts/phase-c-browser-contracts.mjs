@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
+import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
 
 export async function phaseCContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
@@ -28,6 +29,7 @@ export async function phaseCContracts(context, options) {
     await page.getByRole('button', { name: /^example-service-78\b/ }).waitFor();
     await page.getByRole('button', { name: /^example-service-81\b/ }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
+    await assertFlatRegistryDetails(page, { docker: true });
     await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await group.waitFor();
     await page.getByRole('button', { name: /^example-service-78\b/ })
