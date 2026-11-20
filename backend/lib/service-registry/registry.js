@@ -61,13 +61,12 @@ function createServiceRegistry(db) {
     'WHERE server_id = ? AND identity_key = ? ' +
     'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
   );
-  // Match an INACTIVE logical service when its ephemeral process PID/ticks
-  // change, but never collapse simultaneous processes merely sharing Python.
-  const findLogical = db.prepare(
+  // Candidate records can be reused when inactive, or when a COMPLETE
+  // snapshot proves their previous process disappeared between scans.
+  const findLogicalCandidates = db.prepare(
     'SELECT id, status, identity_key FROM registry_services ' +
     'WHERE server_id = ? AND source = ? AND logical_identity_key = ? ' +
-    "AND status IN ('offline','unknown') " +
-    'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
+    'ORDER BY last_seen_at DESC, id DESC'
   );
   const findWeakEndpoint = db.prepare(
     'SELECT s.id, s.status FROM registry_services s ' +
@@ -132,7 +131,14 @@ function createServiceRegistry(db) {
       existing = null;
     }
     if (!existing && item.logicalKey) {
-      existing = findLogical.get(item.serverId, item.source, item.logicalKey);
+      const candidates = findLogicalCandidates.all(item.serverId, item.source, item.logicalKey);
+      existing = candidates.find(candidate =>
+        candidate.status !== 'listening' ||
+        (options.allowActiveReuse === true &&
+          options.currentProcessKeys instanceof Set &&
+          candidate.identity_key &&
+          !options.currentProcessKeys.has(candidate.identity_key))
+      ) || null;
     }
 
     const serviceId = existing ? existing.id : randomUUID();
@@ -322,13 +328,22 @@ function createServiceRegistry(db) {
       throw new TypeError('Invalid scan error code');
     }
 
+    // Build the process fingerprint set before reconciling individual rows.
+    // This prevents two concurrently listening workers with the same
+    // executable/cwd from being folded into one logical record.
+    const items = rows.map(row => normalizeObservation(row, serverId));
+    const currentProcessKeys = new Set(items.map(item => item.identityKey).filter(Boolean));
     const observed = new Set();
     for (const row of rows) {
       const item = normalizeObservation(row, serverId);
       if (item.source !== source || item.protocol !== 'tcp' || item.internal) {
         throw new TypeError('Snapshot contains out-of-scope listener');
       }
-      const serviceId = insertObservation(row, { serverId, at });
+      const serviceId = insertObservation(row, {
+        serverId, at,
+        allowActiveReuse: complete && source === 'system',
+        currentProcessKeys,
+      });
       observed.add(serviceId);
       if (onObservation) onObservation(serviceId, row, at);
     }
