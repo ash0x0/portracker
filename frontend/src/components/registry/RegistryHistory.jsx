@@ -320,9 +320,9 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       {!invalidPort && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {data.items.map(service => (
-            <React.Fragment key={service.id}>
-            <article
-              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+            <article key={service.id}
+              className={"min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 " +
+                (selectedId === service.id ? "col-span-full" : "")}>
               <div className="flex items-start gap-3">
                 <button type="button" onClick={() => {
                   setForgetDialogOpen(false);
@@ -375,19 +375,20 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
                   <Pin className="w-4 h-4" fill={service.pinned ? "currentColor" : "none"} aria-hidden="true" />
                 </button>
               </div>
+              {selectedId === service.id && (
+                <div className="mt-4 min-w-0">
+                  <RegistryServiceDetails
+                    detail={detail?.id === service.id ? detail : null}
+                    detailError={detailError}
+                    onPinToggle={handlePinToggle}
+                    onForget={() => setForgetDialogOpen(true)}
+                    onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }}
+                    pinBusy={Boolean(pinBusyId)}
+                    forgetting={forgetting}
+                  />
+                </div>
+              )}
             </article>
-            {selectedId === service.id && (
-              <RegistryServiceDetails
-                detail={detail?.id === service.id ? detail : null}
-                detailError={detailError}
-                onPinToggle={handlePinToggle}
-                onForget={() => setForgetDialogOpen(true)}
-                onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }}
-                pinBusy={Boolean(pinBusyId)}
-                forgetting={forgetting}
-              />
-            )}
-            </React.Fragment>
           ))}
         </div>
       )}
