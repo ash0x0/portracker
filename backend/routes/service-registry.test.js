@@ -77,6 +77,19 @@ describe('registry REST API authorization and validation', () => {
     expect((await fetch(url + '/' + record.id)).status).toBe(404);
   }));
 
+  test('manual POST requires authentication and opt-in; GET refresh never scans', async () => withServer(
+    async ({ url }) => {
+      process.env.ENABLE_AUTH = 'false';
+      const denied = await fetch(url + '/scan', { method: 'POST' });
+      expect(denied.status).toBe(403);
+      const refresh = await fetch(url + '/scan-status');
+      expect(refresh.status).toBe(200);
+      expect((await refresh.json()).enabled).toBe(false);
+      process.env.ENABLE_AUTH = 'true';
+      expect((await fetch(url + '/scan', { method: 'POST' })).status).toBe(401);
+    }
+  ));
+
   test('history reads and destructive forget require auth when configured', async () => withServer(async ({ registry, url }) => {
     process.env.ENABLE_AUTH = 'true';
     const record = registry.observe({
