@@ -37,6 +37,33 @@ function createRegistryRouter(registry, {
     }
   });
 
+  // One bounded response for the Pinned Services view. Grouping never
+  // changes ownership of pins, recovery notes, or source-specific history.
+  router.get('/pinned-groups', requireAuth, (req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      const result = registry.listPinnedGroups({
+        serverId: req.query.serverId, limit: req.query.limit,
+        offset: req.query.offset, status: req.query.status,
+        source: req.query.source, search: req.query.search,
+        portPrefix: req.query.portPrefix, seenSince: req.query.seenSince,
+      });
+      if (httpStore) {
+        result.items = result.items.map(group => ({
+          ...group, services: group.services.map(service =>
+            ({ ...service, ...httpStore.getMetadata(service.id) })),
+        }));
+        result.items.forEach(group => {
+          group.iconHash = group.services.find(service => service.iconHash)?.iconHash || null;
+        });
+      }
+      res.json(result);
+    } catch (error) {
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to list pinned service groups' });
+    }
+  });
+
   router.get('/scan-status', requireAuth, (req, res) => {
     res.set('Cache-Control', 'no-store');
     res.json({
