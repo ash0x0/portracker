@@ -2043,7 +2043,7 @@ export default function App() {
           sidebarLayout={sidebarLayout}
           onOpenAddServer={handleOpenAddServer}
         >
-          <main className="flex-1 overflow-auto">
+          <main className="flex-1 min-h-0 min-w-0 overflow-auto">
             <div className="p-6">
               <nav role="tablist" aria-label="Dashboard views" className="flex flex-wrap gap-2 mb-6">
                 <button type="button" role="tab" aria-selected={activeView === "live"}
