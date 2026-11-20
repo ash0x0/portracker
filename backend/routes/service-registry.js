@@ -22,6 +22,7 @@ function createRegistryRouter(registry, {
         search: req.query.search,
         port: req.query.port,
         portPrefix: req.query.portPrefix,
+        pinnedOnly: req.query.pinnedOnly,
         seenSince: req.query.seenSince,
       });
       if (httpStore) {
@@ -105,6 +106,22 @@ function createRegistryRouter(registry, {
       return res.send(icon.bytes);
     } catch {
       return res.status(500).json({ error: 'Unable to load cached icon' });
+    }
+  });
+
+  // Bookmark a durable logical service, never a network port or a process PID.
+  router.put('/:id/pin', requireAuth, (req, res) => {
+    try {
+      if (!req.body || typeof req.body.pinned !== 'boolean') {
+        throw new TypeError('Pinned must be a boolean');
+      }
+      const service = registry.setPinned(req.params.id, req.body.pinned);
+      if (!service) return res.status(404).json({ error: 'Saved service not found' });
+      res.set('Cache-Control', 'no-store');
+      return res.json({ id: service.id, pinned: service.pinned, pinnedAt: service.pinnedAt });
+    } catch (error) {
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to update service pin' });
     }
   });
 
