@@ -326,7 +326,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
               <div className="flex items-start gap-3">
                 <button type="button" onClick={() => {
                   setForgetDialogOpen(false);
-                  setSelectedId(previous => previous === service.id ? null : service.id);
+                  setSelectedId(service.id);
                 }}
                   aria-pressed={selectedId === service.id}
                   className="min-w-0 flex-1 text-left space-y-2 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
