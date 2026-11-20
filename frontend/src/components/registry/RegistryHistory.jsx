@@ -10,7 +10,7 @@ import {
   forgetRegistryService,
 } from "../../lib/api/serviceRegistry";
 import {
-  PAGE_SIZE, parseRegistryPortFilter, registryPageCount,
+  PAGE_SIZE, parseRegistryPortPrefix, registryPageCount,
   registryStatusLabel, registryTimestamp,
 } from "../../lib/registry-utils.mjs";
 
@@ -81,7 +81,7 @@ export function RegistryHistory() {
     return () => clearInterval(timer);
   }, []);
 
-  const parsedPort = parseRegistryPortFilter(portText);
+  const parsedPort = parseRegistryPortPrefix(portText);
   const invalidPort = Boolean(portText.trim()) && parsedPort === null;
 
   useEffect(() => {
@@ -92,7 +92,7 @@ export function RegistryHistory() {
     Promise.all([
       getRegistryServices({
         limit: PAGE_SIZE, offset: page * PAGE_SIZE, serverId: "local",
-        status, source, search, port: parsedPort,
+        status, source, search, portPrefix: parsedPort,
         seenSince: lastSeenWindow ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
       }, controller.signal),
       getRegistryScanStatus(controller.signal),
@@ -168,9 +168,9 @@ export function RegistryHistory() {
           </span>
         </label>
         <label className="text-sm space-y-1">
-          <span className="text-slate-600 dark:text-slate-300">Port</span>
+          <span className="text-slate-600 dark:text-slate-300">Port (starts with)</span>
           <input aria-label="Filter by port" inputMode="numeric" maxLength={5} value={portText}
-            placeholder="Any port" onChange={e => { setPortText(e.target.value); setPage(0); }}
+            placeholder="e.g. 41" onChange={e => { setPortText(e.target.value); setPage(0); }}
             className={FIELD_CLASS + " w-full"} />
         </label>
         <label className="text-sm space-y-1">
@@ -205,7 +205,7 @@ export function RegistryHistory() {
         </label>
       </div>
 
-      {invalidPort && <p role="alert" className="text-sm text-red-600">Enter a TCP port from 1 to 65535.</p>}
+      {invalidPort && <p role="alert" className="text-sm text-red-600">Enter a numeric port prefix (1–5 digits, 1–65535).</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {loading && <p role="status" className="text-sm text-slate-500">Loading service history…</p>}
 
