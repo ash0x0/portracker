@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
 import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
+import { phase4VisualContracts } from './phase-4-browser-contracts.mjs';
 
 export async function phaseCContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
@@ -50,6 +51,7 @@ export async function phaseCContracts(context, options) {
     await page.getByRole('button', { name: 'Pin example-service-78' }).click();
     await page.getByRole('button', { name: 'Unpin example-service-78' }).waitFor();
     assert.equal(records[78].pinned, true, 'History must retain quick Pin/Unpin');
+    await phase4VisualContracts(page);
   } finally {
     await page.evaluate(() => {
       localStorage.setItem('portrackerActiveView', 'live');

@@ -1,6 +1,5 @@
 import { RegistryCapabilities } from "./RegistryCapabilities";
-import { RegistryServiceDetails } from "./RegistryServiceDetails";
-import { RegistryHistoryActions } from "./RegistryHistoryActions";
+import { RegistryHistoryCard } from "./RegistryHistoryCard";
 import { RegistryScanSummary } from "./RegistryScanSummary";
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
@@ -16,7 +15,7 @@ import {
   forgetRegistryService,
 } from "../../lib/api/serviceRegistry";
 import {
-  PAGE_SIZE, parseRegistryPortPrefix, registryPageCount, registryTimestamp,
+  PAGE_SIZE, parseRegistryPortPrefix, registryPageCount,
 } from "../../lib/registry-utils.mjs";
 
 const FIELD_CLASS = "rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm";
@@ -299,73 +298,19 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       )}
 
       {!invalidPort && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+        <div className="space-y-3" data-history-service-list>
           {data.items.map(service => (
-            <article key={service.id}
-              className={"min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 " +
-                (selectedId === service.id ? "col-span-full" : "")}>
-              <div data-history-service-header className="flex flex-wrap items-start justify-between gap-3">
-                <button type="button" onClick={() => {
-                  setForgetDialogOpen(false);
-                  setSelectedId(previous => previous === service.id ? null : service.id);
-                }}
-                  aria-expanded={selectedId === service.id}
-                  aria-controls={selectedId === service.id ? "history-detail-" + service.id : undefined}
-                  aria-pressed={selectedId === service.id}
-                  className="min-w-0 flex-1 text-left space-y-2 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-start gap-2 min-w-0">
-                  {service.iconHash && (
-                    <img alt="" loading="lazy" width="24" height="24"
-                      className="w-6 h-6 flex-none object-contain"
-                      src={"/api/service-registry/icons/" + service.iconHash} />
-                  )}
-                  <div className="min-w-0">
-                    <strong className="block truncate text-slate-900 dark:text-white">
-                      {service.displayName}
-                    </strong>
-                    {service.httpTitle && (
-                      <p className="text-sm truncate text-slate-600 dark:text-slate-300"
-                        title={service.httpTitle}>{service.httpTitle}</p>
-                    )}
-                  </div>
-                </div>
-              </div>
-              <p className="text-sm text-slate-600 dark:text-slate-400">
-                {service.previewHostIp || "Unknown host"}:{service.previewPort ?? "?"}
-                {" · "}{(service.sources || [service.source]).join(" + ")}{" · "}{service.endpointCount || 0} endpoint(s)
-              </p>
-              <p className="text-xs text-slate-500 dark:text-slate-400">
-                Last seen {registryTimestamp(service.lastSeenAt)}
-              </p>
-              {service.identityConfidence === "uncertain" && (
-                <p className="text-xs text-amber-700 dark:text-amber-400">
-                  Identity uncertain: a port can be reused by a different app
-                </p>
-              )}
+            <RegistryHistoryCard key={service.id} service={service}
+              selected={selectedId} detail={detail} detailError={detailError}
+              pinBusy={Boolean(pinBusyId)} forgetting={forgetting}
+              onSelect={id => {
+                setForgetDialogOpen(false);
+                setSelectedId(previous => previous === id ? null : id);
+              }}
+              onPinToggle={handlePinToggle}
+              onForget={() => setForgetDialogOpen(true)}
+              onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }} />
 
-                </button>
-                <RegistryHistoryActions service={service}
-                  expanded={selectedId === service.id} pinBusy={Boolean(pinBusyId)}
-                  forgetting={forgetting} onPinToggle={handlePinToggle}
-                  onForget={() => setForgetDialogOpen(true)}
-                  onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }} />
-              </div>
-              {selectedId === service.id && (
-                <div id={"history-detail-" + service.id} className="mt-4 min-w-0">
-                  <RegistryServiceDetails
-                    detail={detail?.id === service.id ? detail : null}
-                    detailError={detailError}
-                    onPinToggle={handlePinToggle}
-                    onForget={() => setForgetDialogOpen(true)}
-                    onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }}
-                    pinBusy={Boolean(pinBusyId)}
-                    forgetting={forgetting}
-                    showActions={false}
-                  />
-                </div>
-              )}
-            </article>
           ))}
         </div>
       )}

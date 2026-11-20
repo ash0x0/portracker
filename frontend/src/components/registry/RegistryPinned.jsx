@@ -311,14 +311,14 @@ export function RegistryPinned({ onBrowseHistory }) {
         </div>
       )}
       {!invalidPort && data.items.length > 0 && (
-        <div className="overflow-hidden rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
-          <div className="flex items-center justify-between px-4 py-3">
+        <div data-pinned-service-list className="space-y-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
               Services ({data.total})
             </h2>
             <span className="text-xs text-slate-500">{data.serviceTotal} pinned records</span>
           </div>
-          <div className="space-y-3 p-3">
+          <div className="space-y-3">
             {data.items.map(group => (
               <RegistryPinnedGroup key={group.id} group={group}
                 expanded={expandedGroupId === group.id} selectedId={selectedId}
