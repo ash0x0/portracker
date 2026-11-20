@@ -247,6 +247,39 @@ async function recoveryCommandFlow(page) {
     }
 }
 
+async function historyHeaderContracts(page) {
+  const card = page.getByRole('button', { name: /^example-service-78\\b/ });
+  const article = card.locator('xpath=ancestor::article[1]');
+  const header = article.locator('[data-history-service-header]');
+  const details = article.locator('section[aria-label="Saved service details"]');
+  const forget = header.getByRole('button', { name: 'Forget example-service-78' });
+  const close = header.getByRole('button', { name: 'Close saved service details' });
+  const pin = header.getByRole('button', { name: /^(Pin|Unpin) example-service-78$/ });
+  assert.equal(await forget.count(), 1,
+    'Forget must be in outer service header beside the status chip');
+  assert.equal(await close.count(), 1, 'Close must be in outer service header');
+  assert.equal(await pin.count(), 1, 'Pin must be in outer service header');
+  assert.equal(await details.getByRole('button', { name: 'Forget example-service-78' }).count(), 0,
+    'Details must not render duplicate nested actions');
+  assert.equal(await card.getAttribute('aria-expanded'), 'true');
+  await pin.click();
+  assert.equal(await details.count(), 1, 'Pin must not collapse selected service');
+  await card.click();
+  assert.equal(await details.count(), 0, 'Click selected service again must collapse');
+  assert.equal(await card.getAttribute('aria-expanded'), 'false');
+  await card.press('Enter');
+  await details.waitFor();
+  await card.press('Space');
+  assert.equal(await details.count(), 0, 'Keyboard activation must toggle closed');
+  await card.click();
+  await details.waitFor();
+  await close.click();
+  assert.equal(await details.count(), 0, 'Close button must collapse');
+  await card.click();
+  await details.waitFor();
+  assert.equal(await forget.count(), 1, 'Forget returns with the selected service');
+}
+
 async function registryHistoryNavigation(page, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
@@ -271,6 +304,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByText('Suggested Docker Compose recovery').waitFor();
     await recoveryCommandFlow(page);
+    await historyHeaderContracts(page);
     await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
     await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
