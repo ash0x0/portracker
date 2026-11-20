@@ -2,7 +2,7 @@ import { RegistryServiceDetails, StatusBadge } from "./RegistryServiceDetails";
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { History, Pin, RefreshCw, ScanSearch, Search } from "lucide-react";
 import {
   getRegistryService,
@@ -17,6 +17,17 @@ import {
 } from "../../lib/registry-utils.mjs";
 
 const FIELD_CLASS = "rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm";
+
+function rememberScrollContainers(element) {
+  const containers = [];
+  for (let node = element?.parentElement; node; node = node.parentElement) {
+    const mode = window.getComputedStyle(node).overflowY;
+    if (node.scrollHeight > node.clientHeight && (mode === "auto" || mode === "scroll")) {
+      containers.push({ node, top: node.scrollTop });
+    }
+  }
+  return containers;
+}
 
 function ScanSummary({ scan }) {
   if (!scan) return null;
@@ -60,6 +71,8 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   const [detailError, setDetailError] = useState("");
   const [forgetting, setForgetting] = useState(false);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
+  const historyRef = useRef(null);
+  const savedScrollRef = useRef(null);
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
@@ -171,6 +184,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
     if (!selectedId || forgetting) return;
     setForgetting(true);
     setDetailError("");
+    savedScrollRef.current = rememberScrollContainers(historyRef.current);
     try {
       await forgetRegistryService(selectedId);
       setData(previous => ({
@@ -187,16 +201,25 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
         refresh();
       }
     } catch (err) {
+      savedScrollRef.current = null;
       setDetailError(err.message || "Unable to forget saved service");
     } finally {
       setForgetting(false);
     }
   }, [selectedId, forgetting, data.items.length, page, refresh]);
 
+  useLayoutEffect(() => {
+    if (!savedScrollRef.current) return;
+    for (const { node, top } of savedScrollRef.current) {
+      if (node.isConnected) node.scrollTop = top;
+    }
+    savedScrollRef.current = null;
+  }, [data, page, selectedId]);
+
   const pages = registryPageCount(data.total);
 
   return (
-    <section aria-label="Saved service history" className="space-y-5">
+    <section ref={historyRef} aria-label="Saved service history" className="space-y-5">
       <div className="flex flex-wrap gap-3 items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
@@ -382,7 +405,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       <Dialog open={forgetDialogOpen} onOpenChange={open => {
         if (!forgetting) setForgetDialogOpen(open);
       }}>
-        <DialogContent>
+        <DialogContent onCloseAutoFocus={event => { if (!selectedId) event.preventDefault(); }}>
           <DialogHeader>
             <DialogTitle>Forget saved service?</DialogTitle>
             <DialogDescription>
