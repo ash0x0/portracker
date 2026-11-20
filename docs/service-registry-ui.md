@@ -123,3 +123,61 @@ potentially unrelated past port occupants.
    failure handling by stopping the Docker API proxy temporarily; the
    independent Linux scanner must still work.
 
+
+## Phase C — Grouped Pinned Services (issues #43 and #44)
+
+The **Pinned** tab has its own **Services** list, styled like Live ports
+instead of reusing History's multi-column card grid. Each row has a
+chevron, icon, status indicator, source label and up to five visible TCP
+port chips. A `+N more` indicator leads to all remembered port chips when
+expanded. Grey chips represent historical endpoints, not necessarily
+currently reachable listeners. Offline and unknown favorites remain visible.
+
+### Identity and grouping boundaries
+
+- A durable registry service UUID owns its **pin, notes, recovery command,
+  status, provenance and historical endpoints**. A service publishing five
+  ports appears as **one service**, not five bookmarks.
+- Only a **verified** Docker daemon fingerprint + Compose project may create
+  a *visual* parent containing multiple different pinned service IDs. The
+  server determines project membership from persisted provenance. It does
+  **not** combine or rewrite child registry records; unpinned project siblings
+  never become pinned.
+- Native listeners or unverified Docker processes with similar names, same
+  user, same port or shared paths are **not** merged. Source-specific Docker/
+  Linux correlation retains the non-destructive behavior from issue #36.
+- `GET /api/service-registry/pinned-groups` accepts History-equivalent
+  validated `limit`, `offset`, `status`, `source`, `search`, and
+  `portPrefix` filters. It filters durable pinned records **before**
+  grouping and paginates after grouping, so sibling entries never split
+  across pages. Endpoints and provenance are bulk-read from SQLite. The
+  payload does not expose private Compose working directories or daemon
+  fingerprints; authorization and no-store caching match History.
+
+### Accidental-unpin protection
+
+Collapsed Pinned rows have **no clickable Unpin action**. Expanding a
+single-service row shows its recovery/metadata details with an explicit
+**Unpin** button; multi-service Compose parents first show child service
+selectors, and Unpin affects the selected child ID only. When one sibling
+is unpinned, the project remains visible until the last pinned child is
+removed, and the remaining child becomes selected. History continues to
+offer fast Pin/Unpin on the summary card.
+
+### Local manual acceptance (NixOS)
+
+1. Pull `main`, rebuild Portracker with existing persistent SQLite volume,
+   the **original** `SESSION_SECRET`, and (if enabled) the private Docker
+   socket proxy overlay from issue #21. This feature needs **no DB migration**.
+2. Pin a Docker/Compose service with several published ports in History.
+   Open Pinned and verify **one Services row** with port chips and `+N`
+   overflow if more than five ports. Expand to inspect all ports and
+   existing Docker provenance/recovery details.
+3. Pin a second *verified* service from the same Compose project. The group
+   should have one project header and separate child selectors. Unpin one
+   child **inside details**; the other stays pinned and keeps its notes.
+4. Ensure Pinned collapsed rows have no interactive Unpin control; History
+   still has it. Check Offline favorites retain historical ports and
+   that unrelated native processes remain separate.
+5. Verify mobile wrapping, page/filters and 30-second background refresh
+   preserve the expanded selection and scroll position.
