@@ -334,7 +334,6 @@ async function registryHistoryNavigation(page, options) {
       fullPage: true,
       animations: 'disabled',
     });
-    // Pinned is a first-class tab and uses the same saved logical record.
     await page.getByRole('button', { name: 'Pin example-service-103', exact: true }).click();
     await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
