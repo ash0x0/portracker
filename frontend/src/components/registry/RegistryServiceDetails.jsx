@@ -3,6 +3,7 @@ import { Pin, Trash2, X } from "lucide-react";
 import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
+import { RegistryDetailSection } from "./RegistryDetailSection";
 import { registryStatusLabel, registryTimestamp } from "../../lib/registry-utils.mjs";
 
 const STATUS_CLASSES = {
@@ -27,7 +28,7 @@ export function RegistryServiceDetails({
 }) {
   return (
     <section aria-label="Saved service details"
-      className="col-span-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3">
+      className="min-w-0 space-y-4" data-detail-layout="sections">
       <div className="flex flex-wrap justify-between gap-3 items-center">
         <h2 className="font-semibold text-lg text-slate-900 dark:text-white">Saved service details</h2>
         {showActions && <div className="flex flex-wrap items-center gap-2">
@@ -55,6 +56,7 @@ export function RegistryServiceDetails({
       {!detail && !detailError && <p role="status">Loading details…</p>}
       {detail && (
         <>
+          <RegistryDetailSection title="Overview">
               <div className="flex flex-wrap gap-2 items-center">
                 {detail.iconHash && (
                   <img alt="" loading="lazy" width="28" height="28"
@@ -91,13 +93,14 @@ export function RegistryServiceDetails({
                   Observed process runs: {detail.runCount} (logical service retained across restarts)
                 </p>
               )}
+          </RegistryDetailSection>
               <RegistryLinuxProvenance evidence={detail.linuxProvenance} />
               <RegistryDockerProvenance evidence={detail.dockerProvenance} />
               {detail.recovery && (
                 <RegistryRecoveryDetails key={detail.id}
                   serviceId={detail.id} recovery={detail.recovery} />
               )}
-              <h3 className="font-medium text-sm">Remembered endpoints</h3>
+              <RegistryDetailSection title="Remembered endpoints">
               <ul className="list-disc pl-5 text-sm space-y-1 text-slate-600 dark:text-slate-300">
                 {detail.endpoints.slice(0, 20).map(ep => (
                   <li key={ep.id}>{ep.hostIp}:{ep.hostPort}/{ep.protocol} · {ep.source}
@@ -110,6 +113,7 @@ export function RegistryServiceDetails({
               <p className="text-xs text-slate-500 dark:text-slate-400">
                 Title/favicon are captured from the HTTP root when enabled. Linux provenance and copy-only recovery suggestions require authenticated opt-in; no commands are executed.
               </p>
+              </RegistryDetailSection>
 
         </>
       )}
