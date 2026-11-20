@@ -221,7 +221,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       <ScanSummary scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
-      {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>
+      {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" aria-label="History filters">
         <label className="text-sm space-y-1">
