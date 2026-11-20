@@ -2,12 +2,13 @@ import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
 import React, { useCallback, useEffect, useState } from "react";
-import { History, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
+import { History, Pin, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
 import {
   getRegistryService,
   getRegistryServices,
   getRegistryScanStatus,
   scanRegistryNow,
+  setRegistryServicePinned,
   forgetRegistryService,
 } from "../../lib/api/serviceRegistry";
 import {
@@ -54,7 +55,7 @@ function ScanSummary({ scan }) {
   );
 }
 
-export function RegistryHistory() {
+export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [portText, setPortText] = useState("");
@@ -74,6 +75,8 @@ export function RegistryHistory() {
   const [scanning, setScanning] = useState(false);
   const [scanMessage, setScanMessage] = useState("");
   const [scanError, setScanError] = useState("");
+  const [pinBusyId, setPinBusyId] = useState(null);
+  const [pinError, setPinError] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => { setPage(0); setSearch(query.trim()); }, 300);
@@ -97,6 +100,7 @@ export function RegistryHistory() {
       getRegistryServices({
         limit: PAGE_SIZE, offset: page * PAGE_SIZE, serverId: "local",
         status, source, search, portPrefix: parsedPort,
+        pinnedOnly: pinnedOnly ? true : null,
         seenSince: lastSeenWindow ? Date.now() - Number(lastSeenWindow) * 86400000 : null,
       }, controller.signal),
       getRegistryScanStatus(controller.signal),
@@ -108,7 +112,7 @@ export function RegistryHistory() {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [page, status, source, search, parsedPort, invalidPort, lastSeenWindow, version]);
+  }, [page, status, source, search, parsedPort, invalidPort, lastSeenWindow, version, pinnedOnly]);
 
   useEffect(() => {
     if (!selectedId) { setDetail(null); setDetailError(""); return; }
@@ -142,6 +146,31 @@ export function RegistryHistory() {
       setScanning(false);
     }
   }, [scanning, scan?.enabled, refresh]);
+  const handlePinToggle = useCallback(async (service) => {
+    if (!service || pinBusyId) return;
+    setPinBusyId(service.id);
+    setPinError("");
+    try {
+      const result = await setRegistryServicePinned(service.id, !service.pinned);
+      setData(previous => ({
+        ...previous,
+        items: (pinnedOnly && !result.pinned
+          ? previous.items.filter(item => item.id !== service.id)
+          : previous.items.map(item => item.id === service.id
+            ? { ...item, pinned: result.pinned, pinnedAt: result.pinnedAt } : item)),
+        total: pinnedOnly && !result.pinned ? Math.max(0, previous.total - 1) : previous.total,
+      }));
+      setDetail(previous => previous?.id === service.id
+        ? { ...previous, pinned: result.pinned, pinnedAt: result.pinnedAt } : previous);
+      if (pinnedOnly && !result.pinned && selectedId === service.id) setSelectedId(null);
+      refresh();
+    } catch (error) {
+      setPinError(error.message || "Unable to update the service pin");
+    } finally {
+      setPinBusyId(null);
+    }
+  }, [pinBusyId, pinnedOnly, selectedId, refresh]);
+
   const handleForget = useCallback(async () => {
     if (!selectedId || forgetting) return;
     if (!window.confirm("Permanently forget this saved history record? The running service will not be stopped.")) return;
@@ -166,10 +195,13 @@ export function RegistryHistory() {
       <div className="flex flex-wrap gap-3 items-start justify-between">
         <div>
           <h1 className="text-2xl font-semibold flex items-center gap-2 text-slate-900 dark:text-white">
-            <History className="w-6 h-6" /> Service history
+            {pinnedOnly ? <Pin className="w-6 h-6" /> : <History className="w-6 h-6" />}
+            {pinnedOnly ? "Pinned services" : "Service history"}
           </h1>
           <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
-            Remembered TCP listeners on this Portracker host, including services that are no longer running.
+            {pinnedOnly
+              ? "Your important services, available even when offline. Offline services are shown first."
+              : "Remembered TCP listeners on this Portracker host, including services that are no longer running."}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 items-center">
@@ -189,6 +221,7 @@ export function RegistryHistory() {
       <ScanSummary scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
+      {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" aria-label="History filters">
         <label className="text-sm space-y-1">
@@ -244,16 +277,27 @@ export function RegistryHistory() {
 
       {!loading && !error && !invalidPort && data.items.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-600 dark:text-slate-400">
-          No saved services match these filters. Services can only appear after they have been observed.
+          {pinnedOnly
+            ? "No pinned services match these filters. Pin a service from History or adjust your filters."
+            : "No saved services match these filters. Services can only appear after they have been observed."}
+          {pinnedOnly && onBrowseHistory && (
+            <button type="button" onClick={onBrowseHistory}
+              className="block mx-auto mt-4 rounded-lg bg-indigo-600 px-3 py-2 text-white text-sm">
+              Browse History
+            </button>
+          )}
         </div>
       )}
 
       {!invalidPort && (
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
           {data.items.map(service => (
-            <button key={service.id} type="button" onClick={() => setSelectedId(service.id)}
-              aria-pressed={selectedId === service.id}
-              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 text-left hover:border-indigo-400 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 space-y-2">
+            <article key={service.id}
+              className="rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4">
+              <div className="flex items-start gap-3">
+                <button type="button" onClick={() => setSelectedId(service.id)}
+                  aria-pressed={selectedId === service.id}
+                  className="min-w-0 flex-1 text-left space-y-2 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-start gap-2 min-w-0">
                   {service.iconHash && (
@@ -285,7 +329,21 @@ export function RegistryHistory() {
                   Identity uncertain: a port can be reused by a different app
                 </p>
               )}
-            </button>
+
+                </button>
+                <button type="button" onClick={() => handlePinToggle(service)}
+                  disabled={Boolean(pinBusyId)}
+                  aria-label={(service.pinned ? "Unpin " : "Pin ") + service.displayName}
+                  aria-pressed={service.pinned}
+                  title={service.pinned ? "Unpin service" : "Pin service"}
+                  className={"shrink-0 rounded-lg border p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 " +
+                    (service.pinned
+                      ? "border-indigo-300 text-indigo-600 dark:text-indigo-300"
+                      : "border-slate-200 dark:border-slate-700 text-slate-500")}>
+                  <Pin className="w-4 h-4" fill={service.pinned ? "currentColor" : "none"} aria-hidden="true" />
+                </button>
+              </div>
+            </article>
           ))}
         </div>
       )}
@@ -304,8 +362,20 @@ export function RegistryHistory() {
         <section aria-label="Saved service details" className="rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3">
           <div className="flex justify-between gap-3 items-center">
             <h2 className="font-semibold text-lg text-slate-900 dark:text-white">Saved service details</h2>
-            <button type="button" aria-label="Close saved service details" onClick={() => setSelectedId(null)}
-              className={FIELD_CLASS}><X className="w-4 h-4" /></button>
+            <div className="flex items-center gap-2">
+              {detail && (
+                <button type="button" onClick={() => handlePinToggle(detail)}
+                  disabled={Boolean(pinBusyId)}
+                  aria-label={detail.pinned ? "Unpin selected service" : "Pin selected service"}
+                  aria-pressed={detail.pinned}
+                  className={FIELD_CLASS + " inline-flex gap-2 items-center disabled:opacity-50"}>
+                  <Pin className="w-4 h-4" fill={detail.pinned ? "currentColor" : "none"} />
+                  {detail.pinned ? "Unpin" : "Pin"}
+                </button>
+              )}
+              <button type="button" aria-label="Close saved service details" onClick={() => setSelectedId(null)}
+                className={FIELD_CLASS}><X className="w-4 h-4" /></button>
+            </div>
           </div>
           {detailError && <p role="alert" className="text-red-600 text-sm">{detailError}</p>}
           {!detail && !detailError && <p role="status">Loading details…</p>}

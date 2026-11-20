@@ -34,3 +34,41 @@ This feature does **not** automatically fetch website page titles/favicons (#6),
 ## Validation
 
 Backend Jest verifies paginated preview fields and authentication; frontend Node tests verify status/port/page formatting; browser contracts exercise History-to-Live navigation and mobile/desktop layouts. Native AMD64 and ARM64 image/browser checks run in the fork's CI.
+
+
+## Pinned services (schema v9)
+
+**Pinned** is a first-class top-level tab next to **Live ports** and **History**.
+The **Pin** control on a saved History card or in service details marks a
+logical historical service for quick access. The Pinned tab uses the same
+service details and **copy-only** preferred recovery command as History.
+Pinned services are sorted **Offline → Unknown → Listening**, with the most
+recently pinned first within each status group.
+
+Pins are stored in SQLite on the service ID, **not** on a port, PID, browser
+local storage key, or Docker container ID. They persist across complete scans,
+Offline states, Portracker restarts, and recognized logical-service restarts.
+When an unrelated application takes over the same port, it must not inherit a
+pin. If a provisional identity cannot be proven across restarts, the new record
+is not pinned automatically. Forgetting a historical service deletes its pin.
+
+The History list stays unfiltered unless `pinnedOnly=true` is requested.
+`PUT /api/service-registry/:id/pin` accepts only
+`{"pinned": true}` or `{"pinned": false}`, is idempotent, and is guarded by
+the dashboard's existing session authorization and same-origin protections.
+The list and pin update responses do not return private provenance or recovery
+instructions. Clicking **Pin** does **not** restart the process.
+
+### Manual verification
+
+- Pin Python HTTP server 4177 in History; confirm it appears in Pinned.
+- Stop the server and perform a complete scan; its Pinned card stays available
+  as Offline. Open it to copy saved recovery instructions without executing.
+- Restart from the same cwd/executable and port; if logical identity was
+  established, the pin remains on the same service record.
+- Run another application on that port; verify it does not steal the pin.
+- Pin at least one Listening, Unknown and Offline entry; verify ordering,
+  search, pagination, refresh, browser reload and container restart.
+- Unpin in either History or Pinned, and verify it disappears from Pinned
+  without being forgotten from History. Check narrow/mobile layout and keyboard
+  access.
