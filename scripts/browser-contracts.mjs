@@ -271,7 +271,7 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /^example-service-103\b/ }).count(), 1);
+    await page.getByRole('button', { name: /^example-service-103\b/ }).waitFor();
     await page.getByRole('button', { name: /^example-service-103\b/ }).click();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.reload();
