@@ -176,15 +176,6 @@ async function remoteDiagnostics(page, options) {
   await page.getByPlaceholder('Search ports, processes...').waitFor();
 }
 
-async function updateRegistryTextField(locator, value) {
-  await locator.evaluate((element, nextValue) => {
-    const prototype = element.tagName === 'TEXTAREA'
-      ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-    Object.getOwnPropertyDescriptor(prototype, 'value').set.call(element, nextValue);
-    element.dispatchEvent(new Event('input', { bubbles: true }));
-  }, value);
-}
-
 async function registryHistoryNavigation(page, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   await page.route(urlPattern, handleRegistryRequest);
@@ -193,7 +184,14 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
     await page.getByText('example-unknown', { exact: true }).waitFor();
     await page.getByRole('combobox', { name: 'Filter by status' }).selectOption('offline');
+    const appliedSearch = page.waitForResponse(response => {
+      const url = new URL(response.url());
+      return url.pathname === '/api/service-registry' &&
+        url.searchParams.get('search') === 'example' && response.status() === 200;
+    });
     await page.getByRole('textbox', { name: 'Search saved service names' }).fill('example');
+    await appliedSearch;
+    await page.waitForTimeout(100);
     await page.getByText('Page 1 of 5').waitFor();
     assert.equal(await page.getByText('example-unknown', { exact: true }).count(), 0,
       'A failed source scan must remain unknown, never appear under offline');
@@ -212,9 +210,9 @@ async function registryHistoryNavigation(page, options) {
     assert.equal(await commandField.inputValue(),
       "cd -- '/home/dev/demo' && docker compose up -d web");
     assert.equal(await commandField.isEditable(), false);
-    await page.getByRole('button', { name: 'Edit command' }).dispatchEvent('click');
-    await updateRegistryTextField(commandField, "cd /home/dev/demo && docker compose up -d web");
-    await page.getByRole('button', { name: 'Save command' }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'Edit command' }).click();
+    await commandField.fill("cd /home/dev/demo && docker compose up -d web");
+    await page.getByRole('button', { name: 'Save command' }).click();
     await page.getByText('Preferred startup command saved.').waitFor();
     assert.equal(await commandField.inputValue(),
       "cd /home/dev/demo && docker compose up -d web");
@@ -225,17 +223,17 @@ async function registryHistoryNavigation(page, options) {
         value: { writeText: async text => { window.__registryCopiedCommand = text; } },
       });
     });
-    await page.getByRole('button', { name: 'Copy start command' }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'Copy start command' }).click();
     await page.getByText('Command copied. Review it before running on the correct host.').waitFor();
     assert.equal(await page.evaluate(() => window.__registryCopiedCommand),
       "cd /home/dev/demo && docker compose up -d web");
-    await page.getByRole('button', { name: 'Edit command' }).dispatchEvent('click');
-    await updateRegistryTextField(commandField, 'this should not be saved');
-    await page.getByRole('button', { name: 'Cancel' }).dispatchEvent('click');
+    await page.getByRole('button', { name: 'Edit command' }).click();
+    await commandField.fill('this should not be saved');
+    await page.getByRole('button', { name: 'Cancel' }).click();
     assert.equal(await commandField.inputValue(),
       "cd /home/dev/demo && docker compose up -d web");
-    await updateRegistryTextField(page.getByRole('textbox', { name: 'My recovery notes' }), 'Use compose on the Docker host');
-    await page.getByRole('button', { name: 'Save notes' }).dispatchEvent('click');
+    await page.getByRole('textbox', { name: 'My recovery notes' }).fill('Use compose on the Docker host');
+    await page.getByRole('button', { name: 'Save notes' }).click();
     await page.getByText('Recovery notes saved.').waitFor();
     await page.getByRole('button', { name: /^example-service-79\b/ })
       .dispatchEvent('click');
