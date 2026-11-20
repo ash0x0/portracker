@@ -1,10 +1,12 @@
 import { RegistryCapabilities } from "./RegistryCapabilities";
-import { RegistryServiceDetails, StatusBadge } from "./RegistryServiceDetails";
+import { RegistryServiceDetails } from "./RegistryServiceDetails";
+import { RegistryHistoryActions } from "./RegistryHistoryActions";
+import { RegistryScanSummary } from "./RegistryScanSummary";
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
 import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
-import { History, Pin, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
+import { History, Pin, RefreshCw, ScanSearch, Search } from "lucide-react";
 import {
   getRegistryService,
   getRegistryServices,
@@ -28,29 +30,6 @@ function rememberScrollContainers(element) {
     }
   }
   return containers;
-}
-
-function ScanSummary({ scan }) {
-  if (!scan) return null;
-  return (
-    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1" aria-label="Background discovery status">
-      {!scan.enabled && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
-          Automatic discovery is disabled. Set <code>SERVICE_REGISTRY_ENABLED=true</code> on the backend
-          and restart Portracker to start recording listeners. Existing history is still available.
-        </p>
-      )}
-      {scan.enabled && scan.sources.length === 0 && <p>Discovery enabled; waiting for the first scan.</p>}
-      {scan.sources.map(item => (
-        <p key={item.source}>
-          <strong className="capitalize">{item.source}</strong>: {item.outcome}
-          {item.lastSuccessAt
-            ? " · Last complete scan " + registryTimestamp(item.lastSuccessAt)
-            : " · No complete scan yet"}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) {
@@ -247,7 +226,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
         </div>
       </div>
 
-      <ScanSummary scan={scan} />
+      <RegistryScanSummary scan={scan} />
       <RegistryCapabilities scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
@@ -366,37 +345,11 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
               )}
 
                 </button>
-                <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
-                  <StatusBadge status={service.status} />
-                  <button type="button" onClick={() => handlePinToggle(service)}
-                    disabled={Boolean(pinBusyId)}
-                    aria-label={(service.pinned ? "Unpin " : "Pin ") + service.displayName}
-                    aria-pressed={service.pinned}
-                    title={service.pinned ? "Unpin service" : "Pin service"}
-                    className={"inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-2.5 py-2 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 " +
-                      (service.pinned
-                        ? "border-indigo-300 text-indigo-600 dark:text-indigo-300"
-                        : "border-slate-200 dark:border-slate-700 text-slate-500")}>
-                    <Pin className="w-4 h-4" fill={service.pinned ? "currentColor" : "none"} aria-hidden="true" />
-                    {selectedId === service.id && <span className="hidden sm:inline">{service.pinned ? "Unpin" : "Pin"}</span>}
-                  </button>
-                  {selectedId === service.id && (
-                    <>
-                      <button type="button" disabled={forgetting}
-                        aria-label={"Forget " + service.displayName}
-                        onClick={() => setForgetDialogOpen(true)}
-                        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-red-300 px-2.5 py-2 text-sm text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500">
-                        <Trash2 className="w-4 h-4" aria-hidden="true" />
-                        <span className="hidden sm:inline">Forget</span>
-                      </button>
-                      <button type="button" aria-label="Close saved service details"
-                        onClick={() => { setSelectedId(null); setForgetDialogOpen(false); }}
-                        className={FIELD_CLASS + " inline-flex shrink-0 items-center px-2.5 py-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
-                        <X className="w-4 h-4" aria-hidden="true" />
-                      </button>
-                    </>
-                  )}
-                </div>
+                <RegistryHistoryActions service={service}
+                  expanded={selectedId === service.id} pinBusy={Boolean(pinBusyId)}
+                  forgetting={forgetting} onPinToggle={handlePinToggle}
+                  onForget={() => setForgetDialogOpen(true)}
+                  onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }} />
               </div>
               {selectedId === service.id && (
                 <div id={"history-detail-" + service.id} className="mt-4 min-w-0">
