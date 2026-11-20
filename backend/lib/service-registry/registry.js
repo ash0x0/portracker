@@ -4,6 +4,7 @@ const { randomUUID } = require('node:crypto');
 const { migrateRegistrySchema } = require('./schema');
 const { normalizeObservation, validServerId, normalizePort } = require('./identity');
 const { createSourceLinks } = require('./source-links');
+const { groupPinnedServices } = require('./pinned-groups');
 
 function toService(row) {
   if (!row) return null;
@@ -292,6 +293,42 @@ function createServiceRegistry(db) {
     return { items, total: count, limit, offset };
   }
 
+  const pinnedEndpoints = db.prepare(
+    'SELECT e.* FROM registry_endpoints e JOIN registry_services s ON s.id = e.service_id ' +
+    'WHERE s.server_id = ? AND s.is_pinned = 1 ORDER BY e.last_seen_at DESC, e.id'
+  );
+  const pinnedProvenance = db.prepare(
+    'SELECT p.service_id, p.daemon_fingerprint, p.compose_project, ' +
+    'p.compose_service, p.identity_confidence FROM registry_docker_provenance p ' +
+    'JOIN registry_services s ON s.id = p.service_id ' +
+    'WHERE s.server_id = ? AND s.is_pinned = 1'
+  );
+
+  function listPinnedGroups(filters = {}) {
+    const limit = boundedInteger(filters.limit, 'limit', 25, 100, 1);
+    const offset = boundedInteger(filters.offset, 'offset', 0, 1000000);
+    const serverId = filters.serverId === undefined ? 'local' : filters.serverId;
+    if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
+
+    // Reuse the exact History filter and source-correlation semantics. Fetch
+    // complete pinned record pages before grouping so a Compose project can
+    // never be split between pages.
+    const services = [];
+    for (let start = 0; ; start += 100) {
+      const batch = listServices({ ...filters, pinnedOnly: true,
+        limit: 100, offset: start });
+      services.push(...batch.items);
+      if (services.length >= batch.total || batch.items.length === 0) break;
+    }
+    const groups = groupPinnedServices(
+      services, pinnedEndpoints.all(serverId), pinnedProvenance.all(serverId)
+    );
+    return {
+      items: groups.slice(offset, offset + limit), total: groups.length,
+      serviceTotal: services.length, limit, offset,
+    };
+  }
+
   const updatePin = db.prepare(
     'UPDATE registry_services SET is_pinned = ?, ' +
     'pinned_at = CASE WHEN ? = 1 THEN COALESCE(pinned_at, ?) ELSE NULL END, ' +
@@ -419,6 +456,7 @@ function createServiceRegistry(db) {
     observe: (row, options = {}) => getService(insertObservation(row, options)),
     getService,
     listServices,
+    listPinnedGroups,
     forgetService,
     setPinned,
     linkDockerProxies: sourceLinks.linkListening,

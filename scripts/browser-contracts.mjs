@@ -7,6 +7,7 @@ import whatsNewConfig from '../frontend/src/lib/whats-new-config.js';
 import { chromium } from 'playwright';
 import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
 import { phaseAContracts } from './phase-a-browser-contracts.mjs';
+import { phaseCContracts } from './phase-c-browser-contracts.mjs';
 
 async function assertLayout(page) {
   const dimensions = await page.evaluate(() => ({ width: window.innerWidth, content: document.documentElement.scrollWidth }));
@@ -270,12 +271,13 @@ async function registryHistoryNavigation(page, options) {
     await page.getByRole('button', { name: 'Unpin example-service-103', exact: true }).waitFor();
     await page.getByRole('tab', { name: 'Pinned', exact: true }).click();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: /^example-service-103\b/ }).count(), 1);
+    await page.getByRole('button', { name: /^example-service-103\b/ }).waitFor();
     await page.getByRole('button', { name: /^example-service-103\b/ }).click();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.reload();
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
-    await page.getByRole('button', { name: 'Unpin example-service-103' }).click();
+    await page.getByRole('button', { name: /^example-service-103\b/ }).click();
+    await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await page.getByText('No pinned services match these filters.').waitFor();
     await page.getByRole('button', { name: 'Browse History' }).click();
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
@@ -311,6 +313,7 @@ async function viewportContract(browser, options) {
     await memoryLabels(page, options);
     await registryHistoryNavigation(page, options);
     await phaseAContracts(context, options);
+    await phaseCContracts(context, options);
     await releaseNotice(page, options.noticePlan.freshVersion);
     await settings(page);
     await peerWarning(page, options);

@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AppHeader } from "./components/layout/AppHeader";
 import { ServerSection } from "./components/server/ServerSection";
 import { RegistryHistory } from "./components/registry/RegistryHistory";
+import { RegistryPinned } from "./components/registry/RegistryPinned";
 import { AppSidebarLayout } from "./components/layout/AppSidebarLayout";
 import { Label } from "@/components/ui/label";
 import { MultipleServerSkeleton } from "./components/server/MultipleServerSkeleton";
@@ -2069,7 +2070,7 @@ export default function App() {
                 <div role="tabpanel" aria-label="History view"><RegistryHistory /></div>
               ) : activeView === "pinned" ? (
                 <div role="tabpanel" aria-label="Pinned services view">
-                  <RegistryHistory pinnedOnly onBrowseHistory={() => setActiveView("history")} />
+                  <RegistryPinned onBrowseHistory={() => setActiveView("history")} />
                 </div>
               ) : (
                 <div role="tabpanel" aria-label="Live ports view">

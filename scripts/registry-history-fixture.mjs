@@ -1,4 +1,48 @@
+import { createRequire } from 'node:module';
 import { registryRecoveryFixture, applyRegistryFixtureNote } from './registry-recovery-fixture.mjs';
+
+const { groupPinnedServices } = createRequire(import.meta.url)(
+  '../backend/lib/service-registry/pinned-groups.js'
+);
+
+function fixtureEndpoints(row) {
+  const ports = row.id === 'history-fixture-78'
+    ? [row.previewPort, 54321, 54322, 54323, 54324, 54327]
+    : [row.previewPort];
+  return ports.map(port => ({
+    id: 'endpoint-' + row.id + '-' + port, service_id: row.id,
+    host_ip: row.previewHostIp, host_port: port, protocol: 'tcp',
+    source: row.source, internal: 0, last_seen_at: row.lastSeenAt,
+  }));
+}
+
+function fixturePinnedGroups(records, query) {
+  const search = (query.get('search') || '').toLowerCase();
+  const status = query.get('status');
+  const source = query.get('source');
+  const prefix = query.get('portPrefix');
+  const since = Number(query.get('seenSince') || 0);
+  const pinned = records.filter(row =>
+    row.pinned &&
+    (!since || row.lastSeenAt >= since) &&
+    (!status || row.status === status) &&
+    (!source || row.source === source) &&
+    (!search || row.displayName.toLowerCase().includes(search)) &&
+    (!prefix || fixtureEndpoints(row).some(ep => String(ep.host_port).startsWith(prefix)))
+  );
+  const provenance = pinned.filter(row =>
+    row.id === 'history-fixture-78' || row.id === 'history-fixture-81'
+  ).map(row => ({
+    service_id: row.id, compose_project: 'demo-group',
+    compose_service: row.displayName, daemon_fingerprint: 'a'.repeat(64),
+    identity_confidence: 'verified',
+  }));
+  const groups = groupPinnedServices(pinned, pinned.flatMap(fixtureEndpoints), provenance);
+  const offset = Number(query.get('offset') || 0);
+  const limit = Number(query.get('limit') || 24);
+  return { items: groups.slice(offset, offset + limit), total: groups.length,
+    serviceTotal: pinned.length, offset, limit };
+}
 
 function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
   return async route => {
@@ -22,6 +66,9 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
         { source: 'system', outcome: 'complete', lastSuccessAt: 1730000000000 },
         { source: 'docker', outcome: 'failed', lastSuccessAt: 1729990000000 },
       ] });
+    }
+    if (suffix === '/pinned-groups' && req.method() === 'GET') {
+      return json(fixturePinnedGroups(records, uri.searchParams));
     }
     if (req.method() === 'PUT' && suffix.endsWith('/pin')) {
       const id = decodeURIComponent(suffix.slice(1, -4));
@@ -78,10 +125,11 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
         pid: 777, uid: 1000, processStartTicks: '876543',
         cwd: '/home/dev/app', executablePath: '/nix/store/node/bin/node',
         capturedAt: 1730000000000,
-      } : null, endpoints: [
-        { id: 'endpoint-' + id, source: item.source, hostIp: item.previewHostIp,
-          hostPort: item.previewPort, protocol: 'tcp', lastSeenAt: item.lastSeenAt },
-      ] });
+      } : null, endpoints: fixtureEndpoints(item).map(endpoint => ({
+        id: endpoint.id, source: endpoint.source, hostIp: endpoint.host_ip,
+        hostPort: endpoint.host_port, protocol: endpoint.protocol,
+        lastSeenAt: endpoint.last_seen_at,
+      })) });
     }
     const filters = uri.searchParams;
     const search = (filters.get('search') || '').toLowerCase();
