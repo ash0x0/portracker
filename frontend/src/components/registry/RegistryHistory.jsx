@@ -326,7 +326,7 @@ export function RegistryHistory() {
                 <p className="text-sm text-slate-500">Showing the 20 most recently seen endpoints.</p>
               )}
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Title/favicon are captured from the HTTP root when enabled. Linux provenance is available only with authenticated opt-in; restart commands are not generated yet.
+                Title/favicon are captured from the HTTP root when enabled. Linux provenance and copy-only recovery suggestions require authenticated opt-in; no commands are executed.
               </p>
               <button type="button" disabled={forgetting} onClick={handleForget}
                 className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm border border-red-300 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50">
