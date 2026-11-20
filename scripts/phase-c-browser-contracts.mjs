@@ -32,15 +32,18 @@ export async function phaseCContracts(context, options) {
     await group.waitFor();
     assert.equal(records[78].pinned, false);
     assert.equal(records[81].pinned, true, 'Unpin only affects selected durable service');
-    await page.getByRole('button', { name: 'example-service-81 service group' }).count();
-    await group.click();
+    await page.getByRole('button', { name: 'Unpin selected service' }).waitFor();
     await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await page.getByText('No pinned services match these filters.').waitFor();
     assert.equal(records[81].pinned, false);
     await page.getByRole('button', { name: 'Browse History' }).click();
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
-    assert.equal(await page.getByRole('button', { name: 'Pin example-service-78' }).count(), 0,
-      'Default History pagination does not need to reveal arbitrary older records');
+    await page.getByRole('textbox', { name: 'Search saved service names' })
+      .fill('example-service-78');
+    await page.getByRole('button', { name: 'Pin example-service-78' }).waitFor();
+    await page.getByRole('button', { name: 'Pin example-service-78' }).click();
+    await page.getByRole('button', { name: 'Unpin example-service-78' }).waitFor();
+    assert.equal(records[78].pinned, true, 'History must retain quick Pin/Unpin');
   } finally {
     await page.close();
   }
