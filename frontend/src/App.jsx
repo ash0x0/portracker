@@ -2034,7 +2034,7 @@ export default function App() {
         >
           <main className="flex-1 overflow-auto">
             <div className="p-6">
-              <nav role="tablist" aria-label="Dashboard views" className="flex gap-2 mb-6">
+              <nav role="tablist" aria-label="Dashboard views" className="flex flex-wrap gap-2 mb-6">
                 <button type="button" role="tab" aria-selected={activeView === "live"}
                   onClick={() => setActiveView("live")}
                   className={"rounded-lg px-4 py-2 text-sm font-semibold " + (activeView === "live"
