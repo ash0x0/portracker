@@ -342,6 +342,11 @@ export function RegistryHistory() {
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 First seen {registryTimestamp(detail.firstSeenAt)} · Last seen {registryTimestamp(detail.lastSeenAt)}
               </p>
+              {detail.runCount > 1 && (
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Observed process runs: {detail.runCount} (logical service retained across restarts)
+                </p>
+              )}
               <RegistryLinuxProvenance evidence={detail.linuxProvenance} />
               <RegistryDockerProvenance evidence={detail.dockerProvenance} />
               {detail.recovery && (

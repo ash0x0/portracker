@@ -129,12 +129,11 @@ describe('registry cross-layer acceptance independent of the browser', () => {
         clock += 60000;
         await createScanner().scanOnce();
         const records = registry.listServices();
-        expect(records.total).toBe(2);
-        const latest = records.items.find(item => item.id !== first.id);
-        expect(latest.status).toBe('listening');
-        expect(registry.getService(first.id).status).toBe('offline');
+        expect(records.total).toBe(1);
+        expect(records.items[0].id).toBe(first.id);
+        expect(records.items[0].status).toBe('listening');
+        expect(registry.getService(first.id).runCount).toBe(2);
         expect(noteStore.get(first.id).text).toBe('nix develop then pnpm dev');
-        expect(noteStore.get(latest.id).text).toBe('');
         db.close();
       });
     } finally { await web.close(); }
@@ -185,7 +184,7 @@ describe('registry cross-layer acceptance independent of the browser', () => {
           .toBe('keep unchanged');
         expect(createRecoveryNotesStore(reopened).get(service.id).text).toBe('start manually');
         expect(reopened.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n)
-          .toBe(6);
+          .toBe(7);
       } finally { reopened.close(); }
     })
   );

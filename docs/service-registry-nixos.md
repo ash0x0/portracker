@@ -154,8 +154,13 @@ These checks require a real NixOS host; the automated CI does not replace them.
 3. Restart Portracker before an authoritative scan. Previously listening
    services must initially become Unknown. After a complete scan, the
    saved service should return to Listening or become Offline appropriately.
-4. Start a different process on the previous port. Verify the old record
-   survives and does not share the new app's identity or manual notes.
+4. Restart **the same app from the same cwd/executable and endpoint**, with
+   trusted process evidence captured; its logical History record and recovery
+   notes should be reused. Start a **different application** on that port,
+   or a different Python app from another cwd, and verify it does not inherit
+   those notes. Multiple simultaneously running processes must never merge.
+   Logical matching is conservative: absent /proc evidence still creates a
+   separate provisional episode.
 5. Start a systemd system unit and a systemd --user unit with actual
    TCP listeners. Verify they are distinguished; interactive session scopes
    and the per-user manager are not falsely presented as application units.
