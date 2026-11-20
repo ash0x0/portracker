@@ -28,7 +28,7 @@ describe('persistent localhost registry storage', () => {
       db.prepare('INSERT INTO notes_legacy_fixture VALUES (?)').run('my manual notes');
       createServiceRegistry(db);
       createServiceRegistry(db);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(6);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(7);
       expect(db.prepare('SELECT note FROM notes_legacy_fixture').get().note)
         .toBe('my manual notes');
     } finally { db.close(); }
@@ -72,6 +72,42 @@ describe('persistent localhost registry storage', () => {
     expect(b.id).not.toBe(a.id);
     expect(a.identityConfidence).toBe('uncertain');
     expect(b.identityConfidence).toBe('uncertain');
+  }));
+
+  test('same Python dev service after confirmed exit reuses logical identity and notes', () => fixture((db, registry) => {
+    const { createRecoveryNotesStore } = require('./recovery-notes');
+    const notes = createRecoveryNotesStore(db);
+    const make = (pid, startTicks, cwd = '/home/dev/site', executablePath = '/nix/store/python/bin/python3') => ({
+      ...port({ owner: 'python3', host_port: 4177, pid }),
+      boot_id: 'a1b2c3d4-0000-4444-8888-eeeeffffffff',
+      process_start_ticks: startTicks,
+      provenance: { kind: 'session_scope', confidence: 'observed', uid: 1000,
+        pid, startTicks, cwd, executablePath },
+    });
+    registry.reconcileSource({ source: 'system', rows: [make(101, '1')], complete: true, at: 1000 });
+    const first = registry.listServices().items[0];
+    notes.saveNotes(first.id, 'cd /home/dev/site && python3 -m http.server 4177', 0);
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 2000 });
+    expect(registry.getService(first.id).status).toBe('offline');
+    registry.reconcileSource({ source: 'system', rows: [make(202, '2')], complete: true, at: 3000 });
+    expect(registry.listServices().total).toBe(1);
+    expect(registry.getService(first.id)).toMatchObject({
+      status: 'listening', firstSeenAt: 1000, lastSeenAt: 3000, runCount: 2,
+    });
+    expect(notes.get(first.id).text).toContain('python3');
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 4000 });
+    registry.reconcileSource({ source: 'system', rows: [make(303, '3', '/home/dev/another-site')], complete: true, at: 5000 });
+    expect(registry.listServices().total).toBe(2);
+    expect(notes.get(first.id).text).toContain('python3');
+  }));
+
+  test('simultaneous same executable does not merge distinct active processes', () => fixture((_db, registry) => {
+    const make = (pid, ticks) => ({ ...port({ owner: 'python', pid, host_port: 4177 }),
+      process_start_ticks: ticks,
+      provenance: { kind: 'manual', confidence: 'inferred', uid: 1000,
+        cwd: '/home/dev/site', executablePath: '/usr/bin/python', pid, startTicks: ticks } });
+    registry.reconcileSource({ source: 'system', rows: [make(101, '1'), make(202, '2')], complete: true, at: 1000 });
+    expect(registry.listServices().total).toBe(2);
   }));
 
   test('different monitored hosts are isolated', () => fixture((_db, registry) => {
