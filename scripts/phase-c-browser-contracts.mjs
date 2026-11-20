@@ -45,6 +45,9 @@ export async function phaseCContracts(context, options) {
     await page.getByRole('button', { name: 'Unpin example-service-78' }).waitFor();
     assert.equal(records[78].pinned, true, 'History must retain quick Pin/Unpin');
   } finally {
+    await page.evaluate(() => {
+      localStorage.setItem('portrackerActiveView', 'live');
+    }).catch(() => undefined);
     await page.close();
   }
 }
