@@ -16,7 +16,7 @@ describe('fork-only localhost registry deployment contract', () => {
     expect(app.build).toEqual({ context: '.', dockerfile: 'Dockerfile' });
     expect(app.image).toBe('portracker:fork-local');
     expect(app.image).not.toContain('mostafawahied');
-    expect(Object.keys(compose.services)).toEqual(['portracker']);
+    expect(Object.keys(compose.services)).toEqual(['portracker', 'docker-api-proxy']);
   });
 
   test('requires authentication, a caller-managed persistent secret and localhost binding', () => {
@@ -25,7 +25,8 @@ describe('fork-only localhost registry deployment contract', () => {
     expect(app.environment.ENABLE_AUTH).toBe('true');
     expect(app.environment.SESSION_SECRET).toContain('SESSION_SECRET:?');
     expect(app.environment.SERVICE_REGISTRY_ENABLED).toBe('true');
-    expect(app.environment.SERVICE_REGISTRY_HTTP_ENABLED).toBe('false');
+    expect(app.environment.SERVICE_REGISTRY_HTTP_ENABLED).toBe('${SERVICE_REGISTRY_HTTP_ENABLED:-true}');
+    expect(app.environment.DOCKER_HOST).toBe('tcp://docker-api-proxy:2375');
     expect(app.environment.SERVICE_REGISTRY_RECOVERY_ENABLED).toBe('true');
     expect(app.environment.HOST_PROC).toBe('/host/proc');
   });
@@ -38,6 +39,26 @@ describe('fork-only localhost registry deployment contract', () => {
     expect(app.volumes).toContain('/proc:/host/proc:ro');
     expect(app.volumes).toContain('./portracker-data:/data');
     expect(app.volumes).not.toContain('/var/run/docker.sock:/var/run/docker.sock:ro');
+  });
+
+  test('read-only Docker proxy is isolated and not a prerequisite for the dashboard', () => {
+    const app = compose.services.portracker;
+    const proxy = compose.services['docker-api-proxy'];
+    expect(app.networks).toEqual(['default', 'docker-monitor']);
+    expect(app.depends_on).toBeUndefined();
+    expect(app.volumes).not.toContain('/var/run/docker.sock:/var/run/docker.sock:ro');
+    expect(proxy.ports).toBeUndefined();
+    expect(proxy.networks).toEqual(['docker-monitor']);
+    expect(compose.networks['docker-monitor'].internal).toBe(true);
+    expect(proxy.environment.POST).toBe('0');
+    expect(proxy.environment.CONTAINERS).toBe('1');
+    expect(proxy.environment.INFO).toBe('1');
+    expect(proxy.environment.DISABLE_IPV6).toBe('1');
+    expect(proxy.privileged).toBeUndefined();
+    expect(proxy.volumes).toEqual([
+      { type: 'bind', source: '${PORTRACKER_DOCKER_SOCK:-/var/run/docker.sock}',
+        target: '/var/run/docker.sock', read_only: true },
+    ]);
   });
 
   test('all opt-in controls correspond to real application configuration', () => {
