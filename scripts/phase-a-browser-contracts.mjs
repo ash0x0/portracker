@@ -80,6 +80,11 @@ export async function phaseAContracts(context, options) {
       resumeScan();
     }
   } finally {
+    await page.evaluate(() => {
+      localStorage.setItem('portrackerActiveView', 'live');
+      localStorage.setItem('autoRefreshEnabled', 'false');
+      localStorage.setItem('refreshInterval', '30000');
+    }).catch(() => undefined);
     await page.close();
   }
 }
