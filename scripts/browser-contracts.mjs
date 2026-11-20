@@ -210,6 +210,16 @@ async function registryHistoryNavigation(page, options) {
     assert.equal(await commandField.inputValue(),
       "cd /home/dev/demo && docker compose up -d web");
     assert.equal(await commandField.isEditable(), false);
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async text => { window.__registryCopiedCommand = text; } },
+      });
+    });
+    await page.getByRole('button', { name: 'Copy start command' }).click();
+    await page.getByText('Command copied. Review it before running on the correct host.').waitFor();
+    assert.equal(await page.evaluate(() => window.__registryCopiedCommand),
+      "cd /home/dev/demo && docker compose up -d web");
     await page.getByRole('button', { name: 'Edit command' }).click();
     await commandField.fill('this should not be saved');
     await page.getByRole('button', { name: 'Cancel' }).click();
