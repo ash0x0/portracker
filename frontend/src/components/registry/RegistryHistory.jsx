@@ -120,7 +120,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
     getRegistryScanStatus(controller.signal).then(result => {
       if (!controller.signal.aborted) setScan(result);
     }).catch(() => {
-      if (!controller.signal.aborted) setScan(null);
+      // The saved registry list remains usable without live scan status.
     });
     return () => controller.abort();
   }, [version]);
