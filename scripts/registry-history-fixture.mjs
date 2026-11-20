@@ -46,7 +46,7 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
       if (body.version !== old.version) return json({ error: 'Preferred command conflict' }, 409);
       if (typeof body.command !== 'string' || typeof body.cwd !== 'string' ||
           body.command.length > 2000 || body.cwd.length > 1024 ||
-          /[\\r\\n]/.test(body.command)) return json({ error: 'Invalid command' }, 400);
+          /[\r\n]/.test(body.command)) return json({ error: 'Invalid command' }, 400);
       const line = body.cwd ? "cd -- '" + body.cwd + "' && " + body.command : body.command;
       const preferred = { command: body.command, cwd: body.cwd, line,
         version: old.version + 1, updatedAt: Date.now() };
