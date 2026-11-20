@@ -19,6 +19,12 @@ export async function historyHeaderContracts(page) {
   await pin.click();
   assert.equal(await details.count(), 1, 'Pin must not collapse selected service');
   await pin.click();
+  await page.waitForFunction(expected => {
+    const button = document.querySelector(
+      'button[aria-pressed][aria-label$="example-service-78"]'
+    );
+    return button?.getAttribute('aria-pressed') === expected;
+  }, initialPin);
   assert.equal(await pin.getAttribute('aria-pressed'), initialPin,
     'Browser fixture pin must be restored for later Pinned scenarios');
   await card.click();
