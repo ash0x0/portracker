@@ -21,6 +21,7 @@ function createRegistryRouter(registry, {
         source: req.query.source,
         search: req.query.search,
         port: req.query.port,
+        portPrefix: req.query.portPrefix,
         seenSince: req.query.seenSince,
       });
       if (httpStore) {
