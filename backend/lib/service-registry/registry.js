@@ -15,6 +15,8 @@ function toService(row) {
     firstSeenAt: row.first_seen_at,
     lastSeenAt: row.last_seen_at,
     status: row.status,
+    pinned: Boolean(row.is_pinned),
+    pinnedAt: row.pinned_at ?? null,
     endpointCount: row.endpoint_count === undefined ? undefined : row.endpoint_count,
     previewHostIp: row.preview_host_ip ?? undefined,
     previewPort: row.preview_port ?? undefined,
@@ -185,6 +187,14 @@ function createServiceRegistry(db) {
 
     const clauses = ['s.server_id = ?'];
     const params = [serverId];
+    const pinnedOnly = filters.pinnedOnly;
+    if (pinnedOnly !== undefined && pinnedOnly !== true && pinnedOnly !== false &&
+        pinnedOnly !== 'true' && pinnedOnly !== 'false') {
+      throw new TypeError('Invalid pinnedOnly');
+    }
+    if (pinnedOnly === true || pinnedOnly === 'true') {
+      clauses.push('s.is_pinned = 1');
+    }
     if (filters.status !== undefined) {
       if (!['unknown', 'listening', 'offline'].includes(filters.status)) {
         throw new TypeError('Invalid status');
@@ -253,10 +263,30 @@ function createServiceRegistry(db) {
       '(SELECT e.protocol FROM registry_endpoints e WHERE e.service_id = s.id ' +
       'ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS preview_protocol ' +
       'FROM registry_services s' + where +
-      ' ORDER BY s.last_seen_at DESC, s.id ASC LIMIT ? OFFSET ?'
+      (pinnedOnly === true || pinnedOnly === 'true'
+        ? " ORDER BY CASE s.status WHEN 'offline' THEN 0 " +
+          "WHEN 'unknown' THEN 1 ELSE 2 END, s.pinned_at DESC, " +
+          's.last_seen_at DESC, s.id ASC LIMIT ? OFFSET ?'
+        : ' ORDER BY s.last_seen_at DESC, s.id ASC LIMIT ? OFFSET ?')
     ).all(...params, limit, offset).map(toService);
 
     return { items, total: count, limit, offset };
+  }
+
+  const updatePin = db.prepare(
+    'UPDATE registry_services SET is_pinned = ?, ' +
+    'pinned_at = CASE WHEN ? = 1 THEN COALESCE(pinned_at, ?) ELSE NULL END, ' +
+    'updated_at = MAX(updated_at, ?) WHERE id = ?'
+  );
+
+  function setPinned(id, pinned, at = Date.now()) {
+    if (typeof id !== 'string' || id.length === 0 || id.length > 128 ||
+        typeof pinned !== 'boolean' || !Number.isSafeInteger(at) || at < 0) {
+      throw new TypeError('Invalid pin update');
+    }
+    const value = pinned ? 1 : 0;
+    const change = updatePin.run(value, value, at, at, id);
+    return change.changes ? getService(id) : null;
   }
 
   const forgetOne = db.transaction((id) => {
@@ -369,6 +399,7 @@ function createServiceRegistry(db) {
     getService,
     listServices,
     forgetService,
+    setPinned,
     markStale,
     getScanStatus,
     reconcileSource: (snapshot) => reconcile(snapshot),
