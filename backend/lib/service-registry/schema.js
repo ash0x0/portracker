@@ -199,6 +199,19 @@ function migrateRegistrySchema(db) {
       .run(7, Date.now());
     db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
       .run(8, Date.now());
+    // Additive v9: favorites belong to the durable service ID, not its port.
+    const serviceColumns = db.prepare('PRAGMA table_info(registry_services)').all();
+    if (!serviceColumns.some(column => column.name === 'is_pinned')) {
+      db.exec('ALTER TABLE registry_services ADD COLUMN is_pinned INTEGER NOT NULL DEFAULT 0 ' +
+        'CHECK (is_pinned IN (0, 1))');
+    }
+    if (!serviceColumns.some(column => column.name === 'pinned_at')) {
+      db.exec('ALTER TABLE registry_services ADD COLUMN pinned_at INTEGER');
+    }
+    db.exec('CREATE INDEX IF NOT EXISTS idx_registry_services_pinned ' +
+      'ON registry_services (server_id, is_pinned, status, pinned_at DESC)');
+    db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
+      .run(9, Date.now());
   });
   migrate();
 }
