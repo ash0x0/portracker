@@ -122,9 +122,9 @@ describe('per-service recovery notes and concurrency', () => {
     expect(db.prepare('SELECT start_command FROM registry_recovery_notes').get().start_command)
       .toBe('pnpm dev');
     expect(() => store.saveStart(record.id, 'old', '', 0)).toThrow('changed elsewhere');
-    expect(() => store.saveStart(record.id, 'bad\\ncommand', '', 1)).toThrow();
+    expect(() => store.saveStart(record.id, 'bad\ncommand', '', 1)).toThrow();
     expect(() => store.saveStart(record.id, 'cmd', 'relative/path', 1)).toThrow();
-    expect(() => store.saveStart(record.id, 'cmd', '/bad\\npath', 1)).toThrow();
+    expect(() => store.saveStart(record.id, 'cmd', '/bad\npath', 1)).toThrow();
     expect(() => store.saveStart(record.id, 'x'.repeat(2001), '', 1)).toThrow();
     expect(store.saveStart('not-a-service', 'echo ok', '', 0)).toBeNull();
     expect(registry.forgetService(record.id)).toBe(true);
