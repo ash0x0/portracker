@@ -227,8 +227,9 @@ TLS-untrusted or client-side-rendered apps without meaning the port is down.
 
       sqlite3 portracker.sqlite ".backup 'pre-upgrade.sqlite'"
 
-- History database migrations are additive schema versions 1 through 6.
-  Automatic schema downgrades are not implemented. Keep the pre-upgrade
+- History database migrations are additive schema versions 1 through 10
+  (including durable pins and source-owned Docker proxy correlations).
+  Automatic schema downgrades are not implemented. Keep a verified pre-upgrade
   backup if you might run an older binary.
 - Active cached raster icon payloads are capped at 128 distinct images
   of at most 128 KiB each (maximum 16 MiB before SQLite/WAL overhead).
