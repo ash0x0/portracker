@@ -23,13 +23,14 @@ export function StatusBadge({ status }) {
 
 export function RegistryServiceDetails({
   detail, detailError, onPinToggle, onClose, onForget, pinBusy, forgetting,
+  showActions = true,
 }) {
   return (
     <section aria-label="Saved service details"
       className="col-span-full min-w-0 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 p-5 space-y-3">
       <div className="flex flex-wrap justify-between gap-3 items-center">
         <h2 className="font-semibold text-lg text-slate-900 dark:text-white">Saved service details</h2>
-        <div className="flex flex-wrap items-center gap-2">
+        {showActions && <div className="flex flex-wrap items-center gap-2">
           {detail && (
             <>
               <button type="button" disabled={forgetting} onClick={onForget}
@@ -48,7 +49,7 @@ export function RegistryServiceDetails({
           )}
           <button type="button" aria-label="Close saved service details" onClick={onClose}
             className={FIELD_CLASS}><X className="w-4 h-4" /></button>
-        </div>
+        </div>}
       </div>
       {detailError && <p role="alert" className="text-red-600 text-sm">{detailError}</p>}
       {!detail && !detailError && <p role="status">Loading details…</p>}

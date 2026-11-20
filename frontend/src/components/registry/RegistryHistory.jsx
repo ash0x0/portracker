@@ -1,5 +1,7 @@
 import { RegistryCapabilities } from "./RegistryCapabilities";
-import { RegistryServiceDetails, StatusBadge } from "./RegistryServiceDetails";
+import { RegistryServiceDetails } from "./RegistryServiceDetails";
+import { RegistryHistoryActions } from "./RegistryHistoryActions";
+import { RegistryScanSummary } from "./RegistryScanSummary";
 import {
   Dialog, DialogContent, DialogHeader, DialogFooter, DialogTitle, DialogDescription,
 } from "@/components/ui/dialog";
@@ -28,29 +30,6 @@ function rememberScrollContainers(element) {
     }
   }
   return containers;
-}
-
-function ScanSummary({ scan }) {
-  if (!scan) return null;
-  return (
-    <div className="text-sm text-slate-600 dark:text-slate-400 space-y-1" aria-label="Background discovery status">
-      {!scan.enabled && (
-        <p className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/40 px-3 py-2">
-          Automatic discovery is disabled. Set <code>SERVICE_REGISTRY_ENABLED=true</code> on the backend
-          and restart Portracker to start recording listeners. Existing history is still available.
-        </p>
-      )}
-      {scan.enabled && scan.sources.length === 0 && <p>Discovery enabled; waiting for the first scan.</p>}
-      {scan.sources.map(item => (
-        <p key={item.source}>
-          <strong className="capitalize">{item.source}</strong>: {item.outcome}
-          {item.lastSuccessAt
-            ? " · Last complete scan " + registryTimestamp(item.lastSuccessAt)
-            : " · No complete scan yet"}
-        </p>
-      ))}
-    </div>
-  );
 }
 
 export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) {
@@ -247,7 +226,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
         </div>
       </div>
 
-      <ScanSummary scan={scan} />
+      <RegistryScanSummary scan={scan} />
       <RegistryCapabilities scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
@@ -325,11 +304,13 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
             <article key={service.id}
               className={"min-w-0 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-900 p-4 " +
                 (selectedId === service.id ? "col-span-full" : "")}>
-              <div className="flex items-start gap-3">
+              <div data-history-service-header className="flex flex-wrap items-start justify-between gap-3">
                 <button type="button" onClick={() => {
                   setForgetDialogOpen(false);
-                  setSelectedId(service.id);
+                  setSelectedId(previous => previous === service.id ? null : service.id);
                 }}
+                  aria-expanded={selectedId === service.id}
+                  aria-controls={selectedId === service.id ? "history-detail-" + service.id : undefined}
                   aria-pressed={selectedId === service.id}
                   className="min-w-0 flex-1 text-left space-y-2 hover:text-indigo-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
               <div className="flex items-start justify-between gap-2">
@@ -349,7 +330,6 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
                     )}
                   </div>
                 </div>
-                <StatusBadge status={service.status} />
               </div>
               <p className="text-sm text-slate-600 dark:text-slate-400">
                 {service.previewHostIp || "Unknown host"}:{service.previewPort ?? "?"}
@@ -365,20 +345,14 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
               )}
 
                 </button>
-                <button type="button" onClick={() => handlePinToggle(service)}
-                  disabled={Boolean(pinBusyId)}
-                  aria-label={(service.pinned ? "Unpin " : "Pin ") + service.displayName}
-                  aria-pressed={service.pinned}
-                  title={service.pinned ? "Unpin service" : "Pin service"}
-                  className={"shrink-0 rounded-lg border p-2 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 " +
-                    (service.pinned
-                      ? "border-indigo-300 text-indigo-600 dark:text-indigo-300"
-                      : "border-slate-200 dark:border-slate-700 text-slate-500")}>
-                  <Pin className="w-4 h-4" fill={service.pinned ? "currentColor" : "none"} aria-hidden="true" />
-                </button>
+                <RegistryHistoryActions service={service}
+                  expanded={selectedId === service.id} pinBusy={Boolean(pinBusyId)}
+                  forgetting={forgetting} onPinToggle={handlePinToggle}
+                  onForget={() => setForgetDialogOpen(true)}
+                  onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }} />
               </div>
               {selectedId === service.id && (
-                <div className="mt-4 min-w-0">
+                <div id={"history-detail-" + service.id} className="mt-4 min-w-0">
                   <RegistryServiceDetails
                     detail={detail?.id === service.id ? detail : null}
                     detailError={detailError}
@@ -387,6 +361,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
                     onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }}
                     pinBusy={Boolean(pinBusyId)}
                     forgetting={forgetting}
+                    showActions={false}
                   />
                 </div>
               )}
