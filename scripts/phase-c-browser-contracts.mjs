@@ -25,8 +25,8 @@ export async function phaseCContracts(context, options) {
     assert.equal(await page.getByRole('button', { name: 'Unpin selected service' }).count(), 0,
       'Collapsed row must not have an Unpin button');
     await group.click();
-    await page.getByRole('button', { name: 'example-service-78' }).waitFor();
-    await page.getByRole('button', { name: 'example-service-81' }).waitFor();
+    await page.getByRole('button', { name: /^example-service-78\b/ }).waitFor();
+    await page.getByRole('button', { name: /^example-service-81\b/ }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await page.getByRole('button', { name: 'Unpin selected service' }).click();
     await group.waitFor();
