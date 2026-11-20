@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Copy, Pencil, Save, X } from "lucide-react";
 import { saveRegistryRecoveryNotes, saveRegistryPreferredStart } from "../../lib/api/serviceRegistry";
+import { RegistryDetailSection } from "./RegistryDetailSection";
 
 export function RegistryRecoveryDetails({ serviceId, recovery }) {
   const [saved, setSaved] = useState(recovery.notes || { text: "", version: 0 });
@@ -69,13 +70,11 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
   }
 
   return (
-    <section aria-label="Recovery information"
-      className="space-y-3 rounded-lg border border-slate-200 dark:border-slate-700 p-3">
-      <h3 className="font-medium text-sm">Recovery instructions</h3>
+    <RegistryDetailSection label="Recovery information" title="Recovery instructions">
       <p className="text-xs text-slate-500 dark:text-slate-400">
         Commands are suggestions to copy and review. Portracker never executes, starts or stops services.
       </p>
-      <div className="space-y-3 rounded-md border border-indigo-200 dark:border-indigo-800 p-3">
+      <div className="min-w-0 space-y-2">
         <h4 className="font-medium text-sm">One-line startup command</h4>
         <p className="text-xs text-slate-500 dark:text-slate-400">
           {preferred.command ? "User supplied · unverified" : preferredLine
@@ -139,7 +138,7 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         </p>
       </div>
       {saved.text && (
-        <div className="rounded-md border border-indigo-200 dark:border-indigo-800 p-3">
+        <div className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
           <p className="text-xs font-medium">My saved instructions (preferred)</p>
           <pre className="text-sm whitespace-pre-wrap break-all font-sans">{saved.text}</pre>
         </div>
@@ -151,7 +150,7 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         </p>
       )}
       {(recovery.recipes || []).map(item => (
-        <div key={item.type} className="space-y-1 rounded-md bg-slate-50 dark:bg-slate-800 p-3">
+        <div key={item.type} className="min-w-0 space-y-1 border-t border-slate-200/60 pt-3 dark:border-slate-700/60">
           <p className="text-sm font-medium">{item.title}</p>
           <p className="text-xs text-slate-500">{item.confidence} · {item.hostScope}</p>
           <code className="block text-sm whitespace-pre-wrap break-all select-text">{item.command}</code>
@@ -178,6 +177,6 @@ export function RegistryRecoveryDetails({ serviceId, recovery }) {
         </button>
         <span role="status" className="text-xs text-slate-600 dark:text-slate-300">{message}</span>
       </div>
-    </section>
+    </RegistryDetailSection>
   );
 }
