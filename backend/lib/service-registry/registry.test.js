@@ -101,6 +101,26 @@ describe('persistent localhost registry storage', () => {
     expect(notes.get(first.id).text).toContain('python3');
   }));
 
+  test('fast restart between complete scans retains one logical record', () => fixture((_db, registry) => {
+    const make = (pid, ticks) => ({
+      ...port({ owner: 'python3', host_port: 4177, pid }),
+      process_start_ticks: ticks,
+      provenance: { kind: 'session_scope', confidence: 'observed', uid: 1000,
+        pid, startTicks: ticks, cwd: '/home/dev/site',
+        executablePath: '/usr/bin/python3' },
+    });
+    registry.reconcileSource({ source: 'system', rows: [make(100, '11')],
+      complete: true, at: 1000 });
+    const original = registry.listServices().items[0];
+    // No scan observed the brief stopped interval; the old record is still Listening.
+    registry.reconcileSource({ source: 'system', rows: [make(200, '22')],
+      complete: true, at: 2000 });
+    expect(registry.listServices().total).toBe(1);
+    expect(registry.getService(original.id)).toMatchObject({
+      status: 'listening', firstSeenAt: 1000, lastSeenAt: 2000, runCount: 2,
+    });
+  }));
+
   test('simultaneous same executable does not merge distinct active processes', () => fixture((_db, registry) => {
     const make = (pid, ticks) => ({ ...port({ owner: 'python', pid, host_port: 4177 }),
       process_start_ticks: ticks,
@@ -136,6 +156,30 @@ describe('persistent localhost registry storage', () => {
     expect(() => registry.listServices({ offset: '-1' })).toThrow('Invalid offset');
     expect(() => registry.listServices({ search: 'x'.repeat(101) })).toThrow('Invalid search');
     expect(() => registry.listServices({ port: '3000 OR 1=1' })).toThrow('Invalid port');
+  }));
+
+  test('port prefix filters all historical endpoints and composes with status', () => fixture((_db, registry) => {
+    const rows = [41, 410, 4177, 4180, 41000, 41999, 4999, 65535].map(
+      (host_port, index) => registry.observe(port({ host_port, pid: 200 + index }), { at: index + 1 })
+    );
+    // Ensure a multi-endpoint service can be matched by an old endpoint too.
+    registry.observe(port({ host_port: 7000, pid: 202 }), { at: 50 });
+    expect(registry.listServices({ portPrefix: '41' }).total).toBe(6);
+    expect(registry.listServices({ portPrefix: '417' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '4' }).total).toBe(7);
+    expect(registry.listServices({ portPrefix: '65' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '65535' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '41', limit: 1 }).items).toHaveLength(1);
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 200 });
+    expect(registry.listServices({ portPrefix: '41', status: 'offline' }).total).toBe(6);
+    expect(registry.listServices({ portPrefix: '41', status: 'listening' }).total).toBe(0);
+    expect(registry.getService(rows[2].id).endpoints.map(e => e.hostPort))
+      .toEqual([7000, 4177]);
+    for (const bad of ['0', '041', '65536', '99999', '1 OR 1=1', '', '1%']) {
+      expect(() => registry.listServices({ portPrefix: bad })).toThrow('Invalid portPrefix');
+    }
+    expect(() => registry.listServices({ port: 41, portPrefix: '41' }))
+      .toThrow('Specify port or portPrefix');
   }));
 
   test('only allowlisted fields are persisted or returned', () => fixture((db, registry) => {

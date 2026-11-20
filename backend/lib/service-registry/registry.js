@@ -61,13 +61,12 @@ function createServiceRegistry(db) {
     'WHERE server_id = ? AND identity_key = ? ' +
     'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
   );
-  // Match an INACTIVE logical service when its ephemeral process PID/ticks
-  // change, but never collapse simultaneous processes merely sharing Python.
-  const findLogical = db.prepare(
+  // Candidate records can be reused when inactive, or when a COMPLETE
+  // snapshot proves their previous process disappeared between scans.
+  const findLogicalCandidates = db.prepare(
     'SELECT id, status, identity_key FROM registry_services ' +
     'WHERE server_id = ? AND source = ? AND logical_identity_key = ? ' +
-    "AND status IN ('offline','unknown') " +
-    'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
+    'ORDER BY last_seen_at DESC, id DESC'
   );
   const findWeakEndpoint = db.prepare(
     'SELECT s.id, s.status FROM registry_services s ' +
@@ -132,7 +131,14 @@ function createServiceRegistry(db) {
       existing = null;
     }
     if (!existing && item.logicalKey) {
-      existing = findLogical.get(item.serverId, item.source, item.logicalKey);
+      const candidates = findLogicalCandidates.all(item.serverId, item.source, item.logicalKey);
+      existing = candidates.find(candidate =>
+        candidate.status !== 'listening' ||
+        (options.allowActiveReuse === true &&
+          options.currentProcessKeys instanceof Set &&
+          candidate.identity_key &&
+          !options.currentProcessKeys.has(candidate.identity_key))
+      ) || null;
     }
 
     const serviceId = existing ? existing.id : randomUUID();
@@ -212,6 +218,26 @@ function createServiceRegistry(db) {
       clauses.push('EXISTS (SELECT 1 FROM registry_endpoints e ' +
         'WHERE e.service_id = s.id AND e.host_port = ?)');
       params.push(port);
+    }
+
+    if (filters.portPrefix !== undefined) {
+      if (filters.port !== undefined) throw new TypeError('Specify port or portPrefix');
+      const prefix = String(filters.portPrefix);
+      if (!/^[1-9][0-9]{0,4}$/.test(prefix) || Number(prefix) > 65535) {
+        throw new TypeError('Invalid portPrefix');
+      }
+      // Numeric ranges preserve port-prefix semantics without a full-table
+      // CAST(host_port AS TEXT), and continue using the endpoint port index.
+      const ranges = [];
+      for (let scale = 1, digits = prefix.length; digits <= 5; scale *= 10, digits += 1) {
+        const from = Number(prefix) * scale;
+        const to = Math.min((Number(prefix) + 1) * scale - 1, 65535);
+        if (from > 65535) break;
+        ranges.push('(e.host_port BETWEEN ? AND ?)');
+        params.push(from, to);
+      }
+      clauses.push('EXISTS (SELECT 1 FROM registry_endpoints e ' +
+        'WHERE e.service_id = s.id AND (' + ranges.join(' OR ') + '))');
     }
 
     const where = ' WHERE ' + clauses.join(' AND ');
@@ -302,13 +328,22 @@ function createServiceRegistry(db) {
       throw new TypeError('Invalid scan error code');
     }
 
+    // Build the process fingerprint set before reconciling individual rows.
+    // This prevents two concurrently listening workers with the same
+    // executable/cwd from being folded into one logical record.
+    const items = rows.map(row => normalizeObservation(row, serverId));
+    const currentProcessKeys = new Set(items.map(item => item.identityKey).filter(Boolean));
     const observed = new Set();
     for (const row of rows) {
       const item = normalizeObservation(row, serverId);
       if (item.source !== source || item.protocol !== 'tcp' || item.internal) {
         throw new TypeError('Snapshot contains out-of-scope listener');
       }
-      const serviceId = insertObservation(row, { serverId, at });
+      const serviceId = insertObservation(row, {
+        serverId, at,
+        allowActiveReuse: complete && source === 'system',
+        currentProcessKeys,
+      });
       observed.add(serviceId);
       if (onObservation) onObservation(serviceId, row, at);
     }
