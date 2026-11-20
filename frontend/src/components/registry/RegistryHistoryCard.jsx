@@ -36,7 +36,7 @@ export function RegistryHistoryCard({
               : <Server aria-hidden="true" className="h-6 w-6 shrink-0 text-slate-500" />}
           <SavedServiceStatusDot status={service.status} />
           <span className="min-w-0 flex-1 space-y-1">
-            <span className={SERVICE_CARD_TITLE_CLASS + " block truncate"}>{service.displayName}</span>
+            <span data-service-list-title className={SERVICE_CARD_TITLE_CLASS + " block truncate"}>{service.displayName}</span>
             {service.httpTitle && (
               <span title={service.httpTitle}
                 className="block truncate text-xs text-slate-600 dark:text-slate-300">
