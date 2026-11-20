@@ -61,6 +61,14 @@ function createServiceRegistry(db) {
     'WHERE server_id = ? AND identity_key = ? ' +
     'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
   );
+  // Match an INACTIVE logical service when its ephemeral process PID/ticks
+  // change, but never collapse simultaneous processes merely sharing Python.
+  const findLogical = db.prepare(
+    'SELECT id, status, identity_key FROM registry_services ' +
+    'WHERE server_id = ? AND source = ? AND logical_identity_key = ? ' +
+    "AND status IN ('offline','unknown') " +
+    'ORDER BY last_seen_at DESC, id DESC LIMIT 1'
+  );
   const findWeakEndpoint = db.prepare(
     'SELECT s.id, s.status FROM registry_services s ' +
     'JOIN registry_endpoints e ON e.service_id = s.id ' +
@@ -71,15 +79,24 @@ function createServiceRegistry(db) {
   );
   const insertService = db.prepare(
     'INSERT INTO registry_services ' +
-    '(id, server_id, identity_key, identity_confidence, display_name, source, ' +
+    '(id, server_id, identity_key, identity_confidence, logical_identity_key, display_name, source, ' +
     'first_seen_at, last_seen_at, status, created_at, updated_at) ' +
-    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'listening', ?, ?)"
+    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'listening', ?, ?)"
   );
   const touchService = db.prepare(
     'UPDATE registry_services SET ' +
     'last_seen_at = MAX(last_seen_at, ?), ' +
     "status = CASE WHEN ? >= last_seen_at THEN 'listening' ELSE status END, " +
-    'updated_at = MAX(updated_at, ?) WHERE id = ?'
+    'updated_at = MAX(updated_at, ?), ' +
+    'identity_key = COALESCE(?, identity_key), ' +
+    'logical_identity_key = COALESCE(logical_identity_key, ?), ' +
+    "identity_confidence = CASE WHEN ? = 'verified' THEN 'verified' ELSE identity_confidence END " +
+    'WHERE id = ?'
+  );
+  const touchRun = db.prepare(
+    'INSERT INTO registry_process_runs (service_id, run_key, first_seen_at, last_seen_at) ' +
+    'VALUES (?, ?, ?, ?) ON CONFLICT(service_id, run_key) DO UPDATE SET ' +
+    'last_seen_at = MAX(registry_process_runs.last_seen_at, excluded.last_seen_at)'
   );
   const touchEndpoint = db.prepare(
     'INSERT INTO registry_endpoints ' +
@@ -110,21 +127,26 @@ function createServiceRegistry(db) {
       );
     }
 
-    // Native PIDs can be reused; a confirmed disappearance ends the old
-    // provisional episode even if a future process reuses its PID and port.
-    // A Docker container ID can remain stable across a stop/restart.
-    if (existing?.status === 'offline' && item.source !== 'docker') {
+    // Without logical evidence, preserve the old conservative episode split.
+    if (existing?.status === 'offline' && item.source !== 'docker' && !item.logicalKey) {
       existing = null;
+    }
+    if (!existing && item.logicalKey) {
+      existing = findLogical.get(item.serverId, item.source, item.logicalKey);
     }
 
     const serviceId = existing ? existing.id : randomUUID();
     if (existing) {
-      touchService.run(at, at, at, serviceId);
+      touchService.run(at, at, at, item.identityKey, item.logicalKey,
+        item.identityConfidence, serviceId);
     } else {
       insertService.run(
         serviceId, item.serverId, item.identityKey, item.identityConfidence,
-        item.displayName, item.source, at, at, at, at
+        item.logicalKey, item.displayName, item.source, at, at, at, at
       );
+    }
+    if (item.source === 'system' && item.identityKey && item.identityConfidence !== 'uncertain') {
+      touchRun.run(serviceId, item.identityKey, at, at);
     }
     touchEndpoint.run(
       randomUUID(), serviceId, item.hostIp, item.hostPort, item.protocol,
@@ -134,6 +156,9 @@ function createServiceRegistry(db) {
   });
 
   const getById = db.prepare('SELECT * FROM registry_services WHERE id = ?');
+  const countRuns = db.prepare(
+    'SELECT COUNT(*) AS count FROM registry_process_runs WHERE service_id = ?'
+  );
   const getEndpoints = db.prepare(
     'SELECT * FROM registry_endpoints WHERE service_id = ? ' +
     'ORDER BY last_seen_at DESC, host_port ASC'
@@ -142,7 +167,8 @@ function createServiceRegistry(db) {
   function getService(id) {
     if (typeof id !== 'string' || id.length > 128) throw new TypeError('Invalid service ID');
     const row = getById.get(id);
-    return row ? { ...toService(row), endpoints: getEndpoints.all(id).map(toEndpoint) } : null;
+    return row ? { ...toService(row), runCount: countRuns.get(id).count,
+      endpoints: getEndpoints.all(id).map(toEndpoint) } : null;
   }
 
   function listServices(filters = {}) {
@@ -210,6 +236,7 @@ function createServiceRegistry(db) {
   const forgetOne = db.transaction((id) => {
     const found = getById.get(id);
     if (!found) return false;
+    db.prepare('DELETE FROM registry_process_runs WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_recovery_notes WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_docker_provenance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_linux_provenance WHERE service_id = ?').run(id);
