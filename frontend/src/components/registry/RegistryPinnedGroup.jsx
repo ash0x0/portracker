@@ -102,6 +102,14 @@ export function RegistryPinnedGroup({
       </button>
       {expanded && (
         <div className="space-y-3 border-t border-slate-200 dark:border-slate-700 p-3">
+          {group.ports.length > 0 && (
+            <div aria-label="All remembered group ports" className="flex flex-wrap items-center gap-2 px-1">
+              <span className="mr-1 text-xs text-slate-500">Ports</span>
+              {group.ports.map(item => (
+                <PortChip key={item.protocol + ":" + item.port} item={item} />
+              ))}
+            </div>
+          )}
           <GroupMemberSelector group={group} selectedId={selectedId} onSelect={onSelect} />
           {selected && (
             <RegistryServiceDetails
