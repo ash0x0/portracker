@@ -17,6 +17,9 @@ trusted.addSubnet('fc00::', 7, 'ipv6');
 
 const MAX_HTML_BYTES = 256 * 1024;
 const MAX_ICON_BYTES = 128 * 1024;
+const MAX_MANIFEST_BYTES = 32 * 1024;
+const MAX_ICON_ATTEMPTS = 5;
+const MAX_PROBE_DURATION_MS = 8000;
 
 function allowedHost(host) {
   const type = net.isIP(host);
@@ -88,22 +91,71 @@ function fail(code) {
   return error;
 }
 
+// Only file-like icon URLs on the original literal-IP origin can be probed.
+function extractIconHints(html) {
+  const icons = [];
+  let manifestHref = null;
+  let scanned = 0;
+  for (const match of html.matchAll(/<link\b[^>]{0,2048}>/gi)) {
+    if (++scanned > 32) break;
+    const rel = (attribute(match[0], 'rel') || '').toLowerCase().split(/\s+/);
+    const href = attribute(match[0], 'href');
+    if (!href) continue;
+    if (rel.includes('manifest') && !manifestHref) manifestHref = cleanText(href);
+    if (rel.includes('icon') || rel.includes('apple-touch-icon') ||
+        rel.includes('apple-touch-icon-precomposed')) {
+      if (icons.length < 12) icons.push(cleanText(href));
+    }
+  }
+  return { icons, manifestHref };
+}
+
+function safeIconUrl(href, base, origin) {
+  if (typeof href !== 'string' || !href || href.length > 2048) return null;
+  try {
+    const url = new URL(href, base);
+    if (url.origin !== origin || url.username || url.password ||
+        url.href.length > 2400 || url.pathname.length > 768 ||
+        url.search.length > 512 || !['http:', 'https:'].includes(url.protocol)) return null;
+    const filename = url.pathname.split('/').pop() || '';
+    const raster = /\.(ico|png|jpe?g|gif|webp)$/i.test(filename);
+    const extensionless = /(?:^|[-_.])(favicon|icon|logo|apple-touch)(?:[-_.]|$)/i.test(filename) &&
+      !/\.[a-z0-9]{1,8}$/i.test(filename);
+    if (!raster && !extensionless) return null;
+    url.hash = '';
+    return url;
+  } catch { return null; }
+}
+
+function manifestIconHints(bytes) {
+  try {
+    const data = JSON.parse(bytes.toString('utf8'));
+    if (!data || !Array.isArray(data.icons)) return [];
+    return data.icons.slice(0, 16)
+      .map(icon => icon && typeof icon.src === 'string' ? icon.src : null)
+      .filter(Boolean);
+  } catch { return []; }
+}
+
 /**
  * All requests use a literal IP in the URL. No DNS lookups, credentials,
  * cookies, proxy settings, cross-origin redirects, or JavaScript execution.
  */
 async function requestBounded(initial, { maxBytes, timeoutMs = 2500, accept = '*/*' }) {
   const origin = initial.origin;
+  const deadline = Date.now() + timeoutMs;
   let target = initial;
   for (let redirectCount = 0; redirectCount <= 2; redirectCount++) {
     if (target.origin !== origin || target.username || target.password ||
         !['http:', 'https:'].includes(target.protocol) ||
         target.href.length > 2400) throw fail('external_redirect');
+    const remaining = deadline - Date.now();
+    if (remaining < 1) throw fail('timeout');
     const response = await new Promise((resolve, reject) => {
       const transport = target.protocol === 'https:' ? https : http;
       const request = transport.request(target, {
-        agent: false, method: 'GET', timeout: timeoutMs,
-        signal: AbortSignal.timeout(timeoutMs),
+        agent: false, method: 'GET', timeout: remaining,
+        signal: AbortSignal.timeout(remaining),
         rejectUnauthorized: true,
         headers: {
           Accept: accept, 'User-Agent': 'Portracker-Metadata/1.0',
@@ -160,44 +212,76 @@ async function probeWebMetadata({ host, port, timeoutMs = 2500 }) {
   const bracketed = net.isIP(host) === 6 ? '[' + host + ']' : host;
   const scheme = [443, 8443, 9443, 10443].includes(port) ? 'https' : 'http';
   const rootUrl = new URL(scheme + '://' + bracketed + ':' + port + '/');
-  const page = await requestBounded(rootUrl, {
-    maxBytes: MAX_HTML_BYTES, timeoutMs, accept: 'text/html,application/xhtml+xml',
-  });
-  if (page.code !== 200 || !['text/html', 'application/xhtml+xml'].includes(page.contentType)) {
-    throw fail('not_html');
+  const deadline = Date.now() + MAX_PROBE_DURATION_MS;
+  async function bounded(url, maxBytes, accept) {
+    const remaining = deadline - Date.now();
+    if (remaining < 1) throw fail('timeout');
+    return requestBounded(url, { maxBytes, timeoutMs: Math.min(timeoutMs, remaining), accept });
   }
-  const { title, iconHref } = extractRootMetadata(page.bytes.toString('utf8'));
+
+  const page = await bounded(rootUrl, MAX_HTML_BYTES, 'text/html,application/xhtml+xml');
+  const html = page.code === 200 &&
+    ['text/html', 'application/xhtml+xml'].includes(page.contentType);
+  const text = html ? page.bytes.toString('utf8') : '';
+  const { title } = extractRootMetadata(text);
+  const hints = extractIconHints(text);
+  const candidates = [];
+  const seen = new Set();
+  function addIcon(href, base) {
+    const url = safeIconUrl(href, base, rootUrl.origin);
+    if (url && !seen.has(url.href)) {
+      seen.add(url.href);
+      candidates.push(url);
+    }
+  }
+
+  for (const href of hints.icons) addIcon(href, page.finalUrl);
+  if (hints.manifestHref && candidates.length < MAX_ICON_ATTEMPTS) {
+    try {
+      const manifest = new URL(hints.manifestHref, page.finalUrl);
+      if (manifest.origin === rootUrl.origin && !manifest.username && !manifest.password &&
+          manifest.href.length <= 2400 && manifest.pathname.length <= 768 &&
+          /\.(webmanifest|json)$/i.test(manifest.pathname)) {
+        const result = await bounded(manifest, MAX_MANIFEST_BYTES,
+          'application/manifest+json,application/json');
+        if (result.code === 200 &&
+            ['application/manifest+json', 'application/json'].includes(result.contentType)) {
+          for (const href of manifestIconHints(result.bytes)) addIcon(href, result.finalUrl);
+        }
+      }
+    } catch { /* An inaccessible manifest must not prevent other icon candidates. */ }
+  }
+  for (const href of ['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/icon.png']) {
+    addIcon(href, rootUrl);
+  }
+
   let iconBytes = null;
   let iconType = null;
-  let icon = null;
-  try {
-    icon = iconHref ? new URL(iconHref, page.finalUrl) : new URL('/favicon.ico', rootUrl);
-    if (icon.origin !== rootUrl.origin || icon.username || icon.password ||
-        icon.href.length > 2400 || !/\.(ico|png|jpg|jpeg|gif|webp)$/i.test(icon.pathname)) {
-      icon = null;
-    }
-  } catch { icon = null; }
-  if (icon) {
+  let attempted = 0;
+  for (const icon of candidates) {
+    if (attempted >= MAX_ICON_ATTEMPTS || Date.now() >= deadline) break;
+    attempted++;
     try {
-      const result = await requestBounded(icon, {
-        maxBytes: MAX_ICON_BYTES, timeoutMs,
-        accept: 'image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon',
-      });
+      const result = await bounded(icon, MAX_ICON_BYTES,
+        'image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon');
+      if (result.code !== 200) continue;
       const detected = iconMime(result.bytes);
-      if (result.code === 200 && detected && (
-        result.contentType === detected ||
-        (detected === 'image/x-icon' && result.contentType === 'image/vnd.microsoft.icon')
-      )) {
+      const declared = result.contentType;
+      // Opaque or missing MIME is accepted only with verified raster magic bytes.
+      if (detected && (declared === detected ||
+          (detected === 'image/x-icon' && declared === 'image/vnd.microsoft.icon') ||
+          declared === 'application/octet-stream' || !declared)) {
         iconBytes = result.bytes;
-        iconType = result.contentType;
+        iconType = detected;
+        break;
       }
-    } catch { /* favicon failure is not service-status failure */ }
+    } catch { /* An icon failure does not change TCP status or remove cached icons. */ }
   }
-  if (!title && !iconBytes) throw fail('no_metadata');
+  if (!title && !iconBytes) throw fail(html ? 'no_metadata' : 'not_html');
   return { title, rootUrl: rootUrl.href, iconBytes, iconType };
 }
 
 module.exports = {
   allowedHost, readHttpMetadataConfig, extractRootMetadata,
-  probeWebMetadata, requestBounded,
+  probeWebMetadata, requestBounded, extractIconHints, safeIconUrl,
 };
