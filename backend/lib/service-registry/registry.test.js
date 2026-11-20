@@ -102,6 +102,30 @@ describe('persistent localhost registry storage', () => {
     expect(() => registry.listServices({ port: '3000 OR 1=1' })).toThrow('Invalid port');
   }));
 
+  test('port prefix filters all historical endpoints and composes with status', () => fixture((_db, registry) => {
+    const rows = [41, 410, 4177, 4180, 41000, 41999, 4999, 65535].map(
+      (host_port, index) => registry.observe(port({ host_port, pid: 200 + index }), { at: index + 1 })
+    );
+    // Ensure a multi-endpoint service can be matched by an old endpoint too.
+    registry.observe(port({ host_port: 7000, pid: 202 }), { at: 50 });
+    expect(registry.listServices({ portPrefix: '41' }).total).toBe(6);
+    expect(registry.listServices({ portPrefix: '417' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '4' }).total).toBe(7);
+    expect(registry.listServices({ portPrefix: '65' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '65535' }).total).toBe(1);
+    expect(registry.listServices({ portPrefix: '41', limit: 1 }).items).toHaveLength(1);
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 200 });
+    expect(registry.listServices({ portPrefix: '41', status: 'offline' }).total).toBe(6);
+    expect(registry.listServices({ portPrefix: '41', status: 'listening' }).total).toBe(0);
+    expect(registry.getService(rows[2].id).endpoints.map(e => e.hostPort))
+      .toEqual([7000, 4177]);
+    for (const bad of ['0', '041', '65536', '99999', '1 OR 1=1', '', '1%']) {
+      expect(() => registry.listServices({ portPrefix: bad })).toThrow('Invalid portPrefix');
+    }
+    expect(() => registry.listServices({ port: 41, portPrefix: '41' }))
+      .toThrow('Specify port or portPrefix');
+  }));
+
   test('only allowlisted fields are persisted or returned', () => fixture((db, registry) => {
     const secret = 'DO_NOT_STORE_THIS_SECRET';
     const observed = registry.observe(port({
