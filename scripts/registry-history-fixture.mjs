@@ -1,6 +1,6 @@
 import { registryRecoveryFixture, applyRegistryFixtureNote } from './registry-recovery-fixture.mjs';
 
-function createRegistryRequestHandler(records, recoveryNotes) {
+function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
   return async route => {
     const req = route.request();
     const uri = new URL(req.url());
@@ -37,6 +37,22 @@ function createRegistryRequestHandler(records, recoveryNotes) {
       const result = applyRegistryFixtureNote(req, suffix, recoveryNotes);
       return json(result.body, result.status);
     }
+    if (req.method() === 'PUT' && suffix.endsWith('/recovery-start')) {
+      const id = suffix.slice(1).split('/')[0];
+      const item = records.find(row => row.id === id);
+      if (!item) return json({ error: 'Saved service not found' }, 404);
+      const body = req.postDataJSON();
+      const old = recoveryStarts.get(id) || { command: '', cwd: '', line: '', version: 0 };
+      if (body.version !== old.version) return json({ error: 'Preferred command conflict' }, 409);
+      if (typeof body.command !== 'string' || typeof body.cwd !== 'string' ||
+          body.command.length > 2000 || body.cwd.length > 1024 ||
+          /[\\r\\n]/.test(body.command)) return json({ error: 'Invalid command' }, 400);
+      const line = body.cwd ? "cd -- '" + body.cwd + "' && " + body.command : body.command;
+      const preferred = { command: body.command, cwd: body.cwd, line,
+        version: old.version + 1, updatedAt: Date.now() };
+      recoveryStarts.set(id, preferred);
+      return json({ preferred });
+    }
     if (suffix && suffix !== '/') {
       const id = decodeURIComponent(suffix.slice(1));
       const item = records.find(row => row.id === id);
@@ -45,7 +61,9 @@ function createRegistryRequestHandler(records, recoveryNotes) {
         records.splice(records.indexOf(item), 1);
         return route.fulfill({ status: 204, body: '' });
       }
-      return json({ ...item, recovery: registryRecoveryFixture(id, recoveryNotes),
+      return json({ ...item, recovery: { ...registryRecoveryFixture(id, recoveryNotes),
+        preferred: recoveryStarts.get(id) || { command: '', cwd: '', line: '', version: 0 },
+      },
         dockerProvenance: id === 'history-fixture-78' ? {
         composeProject: 'demo', composeService: 'web',
         containerName: 'demo-web-1', image: 'nginx:stable',
@@ -118,7 +136,12 @@ export function createRegistryHistoryFixture() {
     metadataFetchedAt: index === 79 ? 1730000000000 : null,
   }));
   const recoveryNotes = new Map();
+  const recoveryStarts = new Map();
+  recoveryStarts.set('history-fixture-78', {
+    command: 'docker compose up -d web', cwd: '/home/dev/demo',
+    line: "cd -- '/home/dev/demo' && docker compose up -d web", version: 1,
+  });
   const urlPattern = '**/api/service-registry**';
-  const handleRegistryRequest = createRegistryRequestHandler(records, recoveryNotes);
+  const handleRegistryRequest = createRegistryRequestHandler(records, recoveryNotes, recoveryStarts);
   return { records, urlPattern, handleRegistryRequest };
 }
