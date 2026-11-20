@@ -2,11 +2,12 @@ import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
 import React, { useCallback, useEffect, useState } from "react";
-import { History, RefreshCw, Search, Trash2, X } from "lucide-react";
+import { History, RefreshCw, ScanSearch, Search, Trash2, X } from "lucide-react";
 import {
   getRegistryService,
   getRegistryServices,
   getRegistryScanStatus,
+  scanRegistryNow,
   forgetRegistryService,
 } from "../../lib/api/serviceRegistry";
 import {
@@ -70,6 +71,9 @@ export function RegistryHistory() {
   const [detail, setDetail] = useState(null);
   const [detailError, setDetailError] = useState("");
   const [forgetting, setForgetting] = useState(false);
+  const [scanning, setScanning] = useState(false);
+  const [scanMessage, setScanMessage] = useState("");
+  const [scanError, setScanError] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => { setPage(0); setSearch(query.trim()); }, 300);
@@ -120,6 +124,24 @@ export function RegistryHistory() {
   }, [selectedId, version]);
 
   const refresh = useCallback(() => setVersion(value => value + 1), []);
+  const handleScanNow = useCallback(async () => {
+    if (scanning || !scan?.enabled) return;
+    setScanning(true);
+    setScanMessage("");
+    setScanError("");
+    try {
+      const result = await scanRegistryNow();
+      setScanMessage("Scan finished: " + (result.results || []).map(item =>
+        item.source + " " + item.outcome
+      ).join(" · "));
+      refresh();
+    } catch (error) {
+      setScanError(error.message || "Unable to start manual scan");
+      refresh();
+    } finally {
+      setScanning(false);
+    }
+  }, [scanning, scan?.enabled, refresh]);
   const handleForget = useCallback(async () => {
     if (!selectedId || forgetting) return;
     if (!window.confirm("Permanently forget this saved history record? The running service will not be stopped.")) return;
@@ -150,12 +172,23 @@ export function RegistryHistory() {
             Remembered TCP listeners on this Portracker host, including services that are no longer running.
           </p>
         </div>
-        <button type="button" onClick={refresh} className={FIELD_CLASS + " inline-flex items-center gap-2"}>
-          <RefreshCw className="w-4 h-4" aria-hidden="true" /> Refresh
-        </button>
+        <div className="flex flex-wrap gap-2 items-center">
+          <button type="button" onClick={refresh} title="Reload saved history; does not scan"
+            className={FIELD_CLASS + " inline-flex items-center gap-2"}>
+            <RefreshCw className="w-4 h-4" aria-hidden="true" /> Refresh
+          </button>
+          <button type="button" onClick={handleScanNow} disabled={scanning || !scan?.enabled}
+            title="Collect current listening services now"
+            className={FIELD_CLASS + " inline-flex items-center gap-2 disabled:opacity-50"}>
+            <ScanSearch className="w-4 h-4" aria-hidden="true" />
+            {scanning ? "Scanning…" : "Scan now"}
+          </button>
+        </div>
       </div>
 
       <ScanSummary scan={scan} />
+      {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
+      {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3" aria-label="History filters">
         <label className="text-sm space-y-1">
