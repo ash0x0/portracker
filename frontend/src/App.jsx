@@ -54,6 +54,8 @@ export default function App() {
   const { shouldShowButton: shouldShowWhatsNewButton, handleShow: handleShowWhatsNew, getModalProps: getWhatsNewModalProps } = useWhatsNew();
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const hasLoadedPortsRef = useRef(false);
+  const latestPortsRequestRef = useRef(0);
   const [error, setError] = useState(null);
   const [hostOverride, setHostOverride] = useState(null);
   const [noteModalOpen, setNoteModalOpen] = useState(false);
@@ -670,9 +672,11 @@ export default function App() {
   const { stampRefreshed, onOpenAddServer: handleOpenAddServer } = sidebarLayout;
 
   const fetchAll = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    setPortSuggestions({});
+    const requestId = ++latestPortsRequestRef.current;
+    if (!hasLoadedPortsRef.current) {
+      setLoading(true);
+      setPortSuggestions({});
+    }
 
     const scanParams = new URLSearchParams();
     if (includeUdp) scanParams.set('includeUdp', 'true');
@@ -824,9 +828,12 @@ export default function App() {
         })
       );
 
+      if (requestId !== latestPortsRequestRef.current) return;
       setGroups(enrichedServers);
       stampRefreshed(enrichedServers);
-      setTimeout(() => setLoading(false), 300);
+      hasLoadedPortsRef.current = true;
+      setError(null);
+      setLoading(false);
     } catch (error) {
       logger.error("Error in fetchAll:", error);
 
@@ -837,15 +844,19 @@ export default function App() {
         const fallbackResponse = await fetch("/api/all-ports");
         if (fallbackResponse.ok) {
           const legacyData = await fallbackResponse.json();
+          if (requestId !== latestPortsRequestRef.current) return;
           setGroups(legacyData);
           stampRefreshed(legacyData);
-          setTimeout(() => setLoading(false), 300);
+          hasLoadedPortsRef.current = true;
+          setError(null);
+          setLoading(false);
           return;
         }
       } catch (fallbackError) {
         logger.error("Even fallback API failed:", fallbackError);
       }
 
+      if (requestId !== latestPortsRequestRef.current) return;
       setError(error.toString());
       setLoading(false);
     }
