@@ -21,8 +21,10 @@ function fixturePinnedGroups(records, query) {
   const status = query.get('status');
   const source = query.get('source');
   const prefix = query.get('portPrefix');
+  const since = Number(query.get('seenSince') || 0);
   const pinned = records.filter(row =>
     row.pinned &&
+    (!since || row.lastSeenAt >= since) &&
     (!status || row.status === status) &&
     (!source || row.source === source) &&
     (!search || row.displayName.toLowerCase().includes(search)) &&
