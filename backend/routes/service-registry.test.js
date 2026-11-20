@@ -96,7 +96,6 @@ describe('registry REST API authorization and validation', () => {
         owner: 'node', source: 'system', pid: 222,
       });
       expect((await (await fetch(url + '?pinnedOnly=true')).json()).total).toBe(0);
-      const pinUrl = url + '/' + first.id + '/pin';
       const put = async (id, payload) => fetch(url + '/' + id + '/pin', {
         method: 'PUT', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
