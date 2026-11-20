@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button";
 import { AppHeader } from "./components/layout/AppHeader";
 import { ServerSection } from "./components/server/ServerSection";
 import { RegistryHistory } from "./components/registry/RegistryHistory";
+import { RegistryPinned } from "./components/registry/RegistryPinned";
 import { AppSidebarLayout } from "./components/layout/AppSidebarLayout";
 import { Label } from "@/components/ui/label";
 import { MultipleServerSkeleton } from "./components/server/MultipleServerSkeleton";
