@@ -248,7 +248,7 @@ async function recoveryCommandFlow(page) {
 }
 
 async function historyHeaderContracts(page) {
-  const card = page.getByRole('button', { name: /^example-service-78\\b/ });
+  const card = page.getByRole('button', { name: /^example-service-78\b/ });
   const article = card.locator('xpath=ancestor::article[1]');
   const header = article.locator('[data-history-service-header]');
   const details = article.locator('section[aria-label="Saved service details"]');
