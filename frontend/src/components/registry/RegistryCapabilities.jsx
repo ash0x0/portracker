@@ -24,7 +24,7 @@ export function RegistryCapabilities({ scan }) {
     : docker.reason && EXPLANATIONS[docker.reason] || "Docker inventory not yet confirmed";
   const httpText = !http.requested ? "Off (user setting)"
     : !http.configured ? EXPLANATIONS[http.reason] || "HTTP target unavailable"
-      : http.lastSuccessAt ? "Enabled — successful title/favicon probe recorded"
+      : http.lastSuccessAt ? "Enabled — successful HTTP metadata probe recorded"
         : "Enabled — no successful HTTP metadata probe yet";
   return (
     <section aria-label="Discovery capabilities"
