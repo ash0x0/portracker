@@ -36,6 +36,21 @@ describe('safe discovery capability reporting', () => {
     expect(cap.http).toMatchObject({ available: true, lastSuccessAt: 190 });
   });
 
+  test('exposes a timestamp for cached icons without private paths or URLs', () => {
+    const cap = readDiscoveryCapabilities({
+      scanEnabled: true, http,
+      httpWorker: { getStatus: () => ({
+        lastAttemptAt: 230, lastSuccessAt: 225,
+        lastIconSuccessAt: 220, lastFailureCode: 'no_metadata',
+      }) },
+    });
+    expect(cap.http).toMatchObject({
+      lastIconSuccessAt: 220, lastSuccessAt: 225,
+      lastFailureCode: 'no_metadata',
+    });
+    expect(JSON.stringify(cap)).not.toContain('127.0.0.1');
+  });
+
   test('a failed Docker scan cannot mark successful HTTP probes or native history unavailable', () => {
     const cap = readDiscoveryCapabilities({
       scanEnabled: true, scanSources: [
