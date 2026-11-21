@@ -235,8 +235,36 @@ async function probeWebMetadata({ host, port, timeoutMs = 2500 }) {
     }
   }
 
+  let iconBytes = null;
+  let iconType = null;
+  let attempted = 0;
+  let cursor = 0;
+  async function tryCandidates() {
+    while (!iconBytes && cursor < candidates.length && attempted < MAX_ICON_ATTEMPTS &&
+        Date.now() < deadline) {
+      const icon = candidates[cursor++];
+      attempted++;
+      try {
+        const result = await bounded(icon, MAX_ICON_BYTES,
+          'image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon');
+        if (result.code !== 200) continue;
+        const detected = iconMime(result.bytes);
+        const declared = result.contentType;
+        // Opaque or missing MIME is accepted only with verified raster magic bytes.
+        if (detected && (declared === detected ||
+            (detected === 'image/x-icon' && declared === 'image/vnd.microsoft.icon') ||
+            declared === 'application/octet-stream' || !declared)) {
+          iconBytes = result.bytes;
+          iconType = detected;
+        }
+      } catch { /* Failed icons never change listener state or remove cached metadata. */ }
+    }
+  }
+
+  // Avoid an unnecessary manifest request when the HTML already supplies a working favicon.
   for (const href of hints.icons) addIcon(href, page.finalUrl);
-  if (hints.manifestHref && candidates.length < MAX_ICON_ATTEMPTS) {
+  await tryCandidates();
+  if (!iconBytes && hints.manifestHref && attempted < MAX_ICON_ATTEMPTS) {
     try {
       const manifest = new URL(hints.manifestHref, page.finalUrl);
       if (manifest.origin === rootUrl.origin && !manifest.username && !manifest.password &&
@@ -247,35 +275,16 @@ async function probeWebMetadata({ host, port, timeoutMs = 2500 }) {
         if (result.code === 200 &&
             ['application/manifest+json', 'application/json'].includes(result.contentType)) {
           for (const href of manifestIconHints(result.bytes)) addIcon(href, result.finalUrl);
+          await tryCandidates();
         }
       }
-    } catch { /* An inaccessible manifest must not prevent other icon candidates. */ }
+    } catch { /* Invalid or unavailable manifest does not prevent default icon paths. */ }
   }
-  for (const href of ['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/icon.png']) {
-    addIcon(href, rootUrl);
-  }
-
-  let iconBytes = null;
-  let iconType = null;
-  let attempted = 0;
-  for (const icon of candidates) {
-    if (attempted >= MAX_ICON_ATTEMPTS || Date.now() >= deadline) break;
-    attempted++;
-    try {
-      const result = await bounded(icon, MAX_ICON_BYTES,
-        'image/png,image/jpeg,image/gif,image/webp,image/x-icon,image/vnd.microsoft.icon');
-      if (result.code !== 200) continue;
-      const detected = iconMime(result.bytes);
-      const declared = result.contentType;
-      // Opaque or missing MIME is accepted only with verified raster magic bytes.
-      if (detected && (declared === detected ||
-          (detected === 'image/x-icon' && declared === 'image/vnd.microsoft.icon') ||
-          declared === 'application/octet-stream' || !declared)) {
-        iconBytes = result.bytes;
-        iconType = detected;
-        break;
-      }
-    } catch { /* An icon failure does not change TCP status or remove cached icons. */ }
+  if (!iconBytes) {
+    for (const href of ['/favicon.ico', '/favicon.png', '/apple-touch-icon.png', '/icon.png']) {
+      addIcon(href, rootUrl);
+    }
+    await tryCandidates();
   }
   if (!title && !iconBytes) throw fail(html ? 'no_metadata' : 'not_html');
   return { title, rootUrl: rootUrl.href, iconBytes, iconType };
