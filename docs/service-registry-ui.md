@@ -13,7 +13,7 @@ The History tab reads saved entries from the authenticated `/api/service-registr
 - Use paginated results (24 at a time), with first/last-seen timestamps and the latest known endpoint.
 - Open a record to see its full historical endpoint list and identity-confidence label.
 - Explicitly **Forget** a selected record after confirmation. This deletes history only; it does **not** stop the process, alter Docker/systemd, or delete existing per-port notes.
-- The page refreshes on demand or at a low frequency only while History is visible. It does not trigger a new host scan from the browser.
+- **Reload list** in History and Pinned fetches saved entries and scan status from the backend without launching discovery. Both views also reload automatically every 30 seconds while mounted; **Scan now** explicitly runs a host discovery scan before reloading the saved list.
 
 ## State interpretation
 
