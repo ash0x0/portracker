@@ -4,6 +4,7 @@ import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
 import { RegistryDetailSection } from "./RegistryDetailSection";
+import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { registryStatusLabel, registryTimestamp } from "../../lib/registry-utils.mjs";
 
 const STATUS_CLASSES = {
@@ -58,11 +59,8 @@ export function RegistryServiceDetails({
         <>
           <RegistryDetailSection title="Overview">
               <div className="flex flex-wrap gap-2 items-center">
-                {detail.iconHash && (
-                  <img alt="" loading="lazy" width="28" height="28"
-                    className="w-7 h-7 object-contain"
-                    src={"/api/service-registry/icons/" + detail.iconHash} />
-                )}
+                <RegistryServiceIcon iconHash={detail.iconHash} name={detail.displayName}
+                  source={detail.source === "docker" ? "docker" : "system"} size={28} />
                 <strong>{detail.displayName}</strong>
                 <StatusBadge status={detail.status} />
                 <span className="text-xs text-slate-500">{detail.identityConfidence} identity</span>
