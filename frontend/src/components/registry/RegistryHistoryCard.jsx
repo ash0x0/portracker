@@ -1,5 +1,5 @@
 import React from "react";
-import { Container, Server } from "lucide-react";
+import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { RegistryHistoryActions } from "./RegistryHistoryActions";
 import { RegistryServiceDetails } from "./RegistryServiceDetails";
 import { registryTimestamp } from "../../lib/registry-utils.mjs";
@@ -28,12 +28,8 @@ export function RegistryHistoryCard({
           aria-label={service.displayName + " service details"}
           className="flex w-full min-w-0 items-center gap-3 text-left lg:w-auto lg:flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
           <ServiceListChevron expanded={expanded} />
-          {service.iconHash
-            ? <img alt="" loading="lazy" width="24" height="24" className="h-6 w-6 shrink-0 object-contain"
-                src={"/api/service-registry/icons/" + service.iconHash} />
-            : isDocker
-              ? <Container aria-hidden="true" className="h-6 w-6 shrink-0 text-blue-500" />
-              : <Server aria-hidden="true" className="h-6 w-6 shrink-0 text-slate-500" />}
+          <RegistryServiceIcon iconHash={service.iconHash} name={service.displayName}
+            source={isDocker ? "docker" : "system"} />
           <SavedServiceStatusDot status={service.status} />
           <span className="min-w-0 flex-1 space-y-1">
             <span data-service-list-title className={SERVICE_CARD_TITLE_CLASS + " block truncate"}>{service.displayName}</span>
