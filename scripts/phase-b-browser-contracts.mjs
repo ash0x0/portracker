@@ -43,7 +43,7 @@ export async function historyHeaderContracts(page) {
     const button = document.querySelector(
       'button[aria-pressed][aria-label$="example-service-78"]'
     );
-    return button?.getAttribute('aria-pressed') === expected;
+    return button?.getAttribute('aria-pressed') === expected && !button.disabled;
   }, toggledPin);
   const toggledAppearance = await pinAppearance(pin, toggledPin);
   assert.deepEqual(toggledAppearance, initialAppearance,
@@ -53,7 +53,7 @@ export async function historyHeaderContracts(page) {
     const button = document.querySelector(
       'button[aria-pressed][aria-label$="example-service-78"]'
     );
-    return button?.getAttribute('aria-pressed') === expected;
+    return button?.getAttribute('aria-pressed') === expected && !button.disabled;
   }, initialPin);
   assert.deepEqual(await pinAppearance(pin, initialPin), initialAppearance,
     'Restoring pin state must restore the visual action affordance');
