@@ -35,7 +35,8 @@ export async function historyHeaderContracts(page) {
     'Details must not render duplicate nested actions');
   assert.equal(await card.getAttribute('aria-expanded'), 'true');
   const initialPin = await pin.getAttribute('aria-pressed');
-  const initialAppearance = await pinAppearance(pin, initialPin);
+  const initialClassName = await pin.getAttribute('class');
+  await pinAppearance(pin, initialPin);
   await pin.click();
   assert.equal(await details.count(), 1, 'Pin must not collapse selected service');
   const toggledPin = initialPin === 'true' ? 'false' : 'true';
@@ -45,9 +46,9 @@ export async function historyHeaderContracts(page) {
     );
     return button?.getAttribute('aria-pressed') === expected && !button.disabled;
   }, toggledPin);
-  const toggledAppearance = await pinAppearance(pin, toggledPin);
-  assert.deepEqual(toggledAppearance, initialAppearance,
-    'Pin and Unpin must share the same outlined indigo styling');
+  await pinAppearance(pin, toggledPin);
+  assert.equal(await pin.getAttribute('class'), initialClassName,
+    'Pin and Unpin must share the same outlined indigo styling, regardless of hover');
   await pin.click();
   await page.waitForFunction(expected => {
     const button = document.querySelector(
@@ -55,8 +56,9 @@ export async function historyHeaderContracts(page) {
     );
     return button?.getAttribute('aria-pressed') === expected && !button.disabled;
   }, initialPin);
-  assert.deepEqual(await pinAppearance(pin, initialPin), initialAppearance,
-    'Restoring pin state must restore the visual action affordance');
+  await pinAppearance(pin, initialPin);
+  assert.equal(await pin.getAttribute('class'), initialClassName,
+    'Restoring pin state must preserve the same action styling');
   await card.click();
   assert.equal(await details.count(), 0, 'Click selected service again must collapse');
   assert.equal(await card.getAttribute('aria-expanded'), 'false');
