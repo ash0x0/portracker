@@ -39,12 +39,13 @@ export async function phaseCContracts(context, options) {
     assert.equal(await selectedUnpin.isEnabled(), true);
     const unpinAppearance = await selectedUnpin.evaluate(button => {
       const style = getComputedStyle(button);
-      return { cursor: style.cursor, opacity: style.opacity, background: style.backgroundColor };
+      return { cursor: style.cursor, opacity: style.opacity, borderWidth: style.borderTopWidth };
     });
     assert.equal(unpinAppearance.cursor, 'pointer');
     assert.equal(unpinAppearance.opacity, '1');
-    assert.notEqual(unpinAppearance.background, 'rgba(0, 0, 0, 0)',
-      'The service-details Unpin action must have a visible surface');
+    assert.notEqual(unpinAppearance.borderWidth, '0px',
+      'The service-details Unpin action must use the outlined style');
+    assert.equal(await selectedUnpin.locator('svg').getAttribute('fill'), 'currentColor');
     await selectedUnpin.click();
     await group.waitFor();
     await page.getByRole('button', { name: /^example-service-78\b/ })
