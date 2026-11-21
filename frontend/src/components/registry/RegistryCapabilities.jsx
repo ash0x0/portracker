@@ -1,4 +1,5 @@
 import React from "react";
+import { RegistryIconHelp } from "./RegistryIconHelp";
 
 const EXPLANATIONS = {
   disabled_by_user: "Disabled by configuration.",
@@ -48,6 +49,7 @@ export function RegistryCapabilities({ scan }) {
             {" · "}Last success: {fmt(docker.lastSuccessAt)}</p>
         </div>
       </div>
+      <RegistryIconHelp http={http} docker={docker} />
     </section>
   );
 }
