@@ -6,13 +6,16 @@ async function pinAppearance(button, pressed) {
     pressed === 'true' ? 'pinned' : 'unpinned');
   assert.equal(await button.isEnabled(), true, 'Pin must be enabled when idle');
   const appearance = await button.evaluate(element => {
-    const { cursor, opacity, backgroundColor } = getComputedStyle(element);
-    return { cursor, opacity, backgroundColor };
+    const { cursor, opacity, borderColor, color, backgroundColor, borderTopWidth } =
+      getComputedStyle(element);
+    return { cursor, opacity, borderColor, color, backgroundColor, borderTopWidth };
   });
   assert.equal(appearance.cursor, 'pointer', 'Idle Pin/Unpin must look clickable');
   assert.equal(appearance.opacity, '1', 'Idle Pin/Unpin must not look disabled');
-  assert.notEqual(appearance.backgroundColor, 'rgba(0, 0, 0, 0)',
-    'Pin/Unpin requires a visible action background');
+  assert.notEqual(appearance.borderTopWidth, '0px', 'Pin/Unpin must retain its outline');
+  assert.equal(await button.locator('svg').getAttribute('fill'),
+    pressed === 'true' ? 'currentColor' : 'none',
+    'Pin uses an outline icon; Unpin uses the filled icon');
   return appearance;
 }
 
@@ -43,8 +46,8 @@ export async function historyHeaderContracts(page) {
     return button?.getAttribute('aria-pressed') === expected;
   }, toggledPin);
   const toggledAppearance = await pinAppearance(pin, toggledPin);
-  assert.notEqual(initialAppearance.backgroundColor, toggledAppearance.backgroundColor,
-    'Pin and Unpin must have visibly different button backgrounds');
+  assert.deepEqual(toggledAppearance, initialAppearance,
+    'Pin and Unpin must share the same outlined indigo styling');
   await pin.click();
   await page.waitForFunction(expected => {
     const button = document.querySelector(
