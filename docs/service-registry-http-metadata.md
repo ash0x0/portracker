@@ -59,8 +59,11 @@ login state, arbitrary deep paths, or JavaScript-rendered metadata.
   cross-origin favicon downloads, remote screenshots, or shell commands.
 - HTTPS certificate verification remains enabled. Self-signed local TLS
   certificates fail conservatively; no global TLS bypass is enabled.
-- HTML is limited to **256 KiB** and images to **128 KiB**, with short request
-  timeouts, a four-target-per-cycle quota and two concurrent probes.
+- HTML is limited to **256 KiB**, web manifests to **32 KiB** and raster
+  icons to **128 KiB each**. At most five icon fetches and one manifest fetch
+  follow the root request, within an eight-second total budget. Each request
+  has its own timeout and at most two same-origin redirects. The worker scans
+  at most four targets per cycle, with two concurrent probes.
 - HTML titles are sanitized and truncated; no HTML is rendered as trusted
   markup. Favicons are checked for common raster formats, and **SVG is
   never cached or served**.
@@ -76,6 +79,52 @@ If an app uses a non-web listener or requires HTTP authentication, Portracker
 retains the TCP history but may have no usable title or favicon. If a root
 document redirects to a different origin, that request is blocked. Traditional
 Homarr/selfhst icons can still be used as product-name-based fallbacks.
+
+## Expanded favicon discovery and dashboard help (issue #55)
+
+The backend now tries the first valid same-origin raster icon from multiple
+HTML `rel=icon` links, Apple touch icon links, one bounded JSON web manifest,
+and common `/favicon.ico`, `/favicon.png`, `/apple-touch-icon.png` and
+`/icon.png` paths. Supported extensionless `/api/favicon`-style filenames
+must have verified raster magic bytes. Opaque or missing MIME is accepted
+only with an allowlisted PNG/JPEG/GIF/WebP/ICO signature. SVG, HTML disguised
+as images, MIME mismatches, public IPs and cross-origin redirects are rejected.
+An icon can be captured even when the root page returns an authentication
+challenge or non-HTML response, provided the icon path is unauthenticated.
+
+**Hermes and VS Code/code-server:** A verified icon requires a reachable
+raster asset on the local probed HTTP port. Native editor processes may have
+no HTTP root, while web IDEs may require login, redirect off-origin or expose
+icons only behind a path prefix. Those limitations cannot be bypassed safely.
+Recognized names get a generic *local* editor/terminal glyph when no actual
+favicon was saved. This does not fetch a third-party CDN or claim a verified logo.
+
+In History or Pinned, expand **Discovery capabilities → Icon and metadata
+discovery — setup and troubleshooting** to see the sanitized HTTP mode,
+last attempt, successful metadata probe, cached icon observation and failure
+category. `capabilities.http.lastIconSuccessAt` exposes the last successful
+icon-caching timestamp or null. These in-memory diagnostics reset on restart;
+the cached icons and service history do not.
+
+Native host: use `curl -I http://127.0.0.1:PORT/favicon.ico` to check a
+service's root-facing icon. Portracker itself uses bounded GET requests, not HEAD.
+Bridge deployment: automatic private gateway selection is on by default, but
+host services bound only to `127.0.0.1` may be unreachable from a container.
+Prefer running Portracker natively for such loopback-only tools. Do not
+disable host firewalls or give the Docker socket broader privileges.
+
+Override the host **only** after verifying a reachable private numeric IP:
+
+    export SERVICE_REGISTRY_HTTP_HOST=172.18.0.1  # EXAMPLE: replace with yours
+    docker compose -f docker-compose.registry-fork.yml up -d --build portracker
+
+Opt out without deleting cached icons:
+
+    export SERVICE_REGISTRY_HTTP_ENABLED=false
+    docker compose -f docker-compose.registry-fork.yml up -d --build portracker
+
+The restricted Docker proxy is separate from HTTP enrichment. Its absence
+can disable Docker provenance but cannot justify broad network access.
 
 ## API
 
