@@ -9,7 +9,7 @@ const BASE_CLASS =
 
 const PIN_CLASS =
   "border-indigo-600 bg-indigo-600 text-white shadow-sm hover:border-indigo-700 hover:bg-indigo-700 " +
-  "dark:border-indigo-500 dark:bg-indigo-500 dark:hover:border-indigo-400 dark:hover:bg-indigo-600";
+  "dark:border-indigo-500 dark:bg-indigo-600 dark:hover:border-indigo-400 dark:hover:bg-indigo-700";
 
 const UNPIN_CLASS =
   "border-amber-400 bg-amber-50 text-amber-900 hover:border-amber-500 hover:bg-amber-100 " +
