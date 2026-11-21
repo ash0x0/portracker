@@ -33,7 +33,19 @@ export async function phaseCContracts(context, options) {
     await page.getByRole('button', { name: /^example-service-81\b/ }).waitFor();
     await page.getByRole('region', { name: 'Recovery information' }).waitFor();
     await assertFlatRegistryDetails(page, { docker: true });
-    await page.getByRole('button', { name: 'Unpin selected service' }).click();
+    const selectedUnpin = page.getByRole('button', { name: 'Unpin selected service' });
+    assert.equal(await selectedUnpin.getAttribute('aria-pressed'), 'true');
+    assert.equal(await selectedUnpin.getAttribute('data-registry-pin-state'), 'pinned');
+    assert.equal(await selectedUnpin.isEnabled(), true);
+    const unpinAppearance = await selectedUnpin.evaluate(button => {
+      const style = getComputedStyle(button);
+      return { cursor: style.cursor, opacity: style.opacity, background: style.backgroundColor };
+    });
+    assert.equal(unpinAppearance.cursor, 'pointer');
+    assert.equal(unpinAppearance.opacity, '1');
+    assert.notEqual(unpinAppearance.background, 'rgba(0, 0, 0, 0)',
+      'The service-details Unpin action must have a visible surface');
+    await selectedUnpin.click();
     await group.waitFor();
     await page.getByRole('button', { name: /^example-service-78\b/ })
       .waitFor({ state: 'hidden' });
