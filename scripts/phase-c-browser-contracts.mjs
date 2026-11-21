@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
 import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
 import { phase4VisualContracts } from './phase-4-browser-contracts.mjs';
+import { phase5IconHelpContracts } from './phase-5-browser-contracts.mjs';
 
 export async function phaseCContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
@@ -16,6 +17,7 @@ export async function phaseCContracts(context, options) {
   try {
     await page.goto(options.baseUrl + '/?server=local', { waitUntil: 'domcontentloaded' });
     await page.getByRole('heading', { name: 'Pinned services' }).waitFor();
+    await phase5IconHelpContracts(page);
     const group = page.getByRole('button', { name: 'demo-group service group' });
     await group.waitFor();
     assert.equal(await page.locator('[data-pinned-group]').count(), 1,
@@ -45,6 +47,7 @@ export async function phaseCContracts(context, options) {
     assert.equal(records[81].pinned, false);
     await page.getByRole('button', { name: 'Browse History' }).click();
     await page.getByRole('heading', { name: 'Service history' }).waitFor();
+    await phase5IconHelpContracts(page);
     await page.getByRole('textbox', { name: 'Search saved service names' })
       .fill('example-service-78');
     await page.getByRole('button', { name: 'Pin example-service-78' }).waitFor();

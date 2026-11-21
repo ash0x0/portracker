@@ -176,6 +176,46 @@ after a NixOS rebuild. Maintain your declarative module configuration or
 document nix develop / direnv / pnpm dev in per-service recovery notes.
 No privileged start endpoint is implemented.
 
+## Icon discovery (Phase 5) and in-dashboard diagnostics
+
+Local HTTP title/favicon enrichment is already **enabled by default** in the
+fork's standalone Compose profile and native installation. The expanded
+detector tries multiple same-origin HTML icon links, Apple touch icons, one
+small web manifest, and conventional favicon paths, all with a strict byte,
+time, redirect, and request budget. The backend never fetches external CDNs,
+executes JavaScript, sends browser cookies, or caches untrusted SVG files.
+
+Open **History** or **Pinned** → **Discovery capabilities**, then expand
+**Icon and metadata discovery — setup and troubleshooting** for the actual
+configuration, last attempt/success, last cached raster icon observation,
+and a sanitized failure reason. These status timestamps reset on process
+restart; stored favicon bytes in SQLite survive it.
+
+For a service like **Hermes** or **VS Code/code-server**, first confirm its
+browser-facing HTTP root actually publishes an unauthenticated raster icon.
+Try, from the relevant host: `curl -I http://127.0.0.1:PORT/favicon.ico`.
+Different icon filenames may be provided by the root HTML or manifest.
+Native editor processes may not serve any HTTP UI at all; authenticated
+code-server instances, paths below a reverse proxy, or loopback-only binds
+can prevent backend retrieval. A generic local editor/terminal icon appears
+for recognized names when an actual cached favicon is unavailable.
+
+Native NixOS probes `127.0.0.1` with the existing default settings.
+Docker bridge mode uses a validated private numeric gateway; **the host's
+127.0.0.1 is not the container's 127.0.0.1**. For a loopback-only dev
+server, prefer native Portracker instead of weakening the host firewall.
+Only if you verify an accessible private gateway, set the optional override:
+
+    export SERVICE_REGISTRY_HTTP_HOST=172.18.0.1  # EXAMPLE ONLY: replace
+    docker compose -f docker-compose.registry-fork.yml up -d --build portracker
+
+To explicitly disable HTTP icon/title probing, export
+`SERVICE_REGISTRY_HTTP_ENABLED=false` before recreating the monitor.
+The default is true. Neither setting requires Docker socket access; an
+absent socket only affects Docker provenance. For rootless Docker, use
+`PORTRACKER_DOCKER_SOCK=$XDG_RUNTIME_DIR/docker.sock` if that path exists.
+Otherwise start `portracker` by itself as described above.
+
 ## Manual NixOS acceptance checklist
 
 These checks require a real NixOS host; the automated CI does not replace them.
@@ -213,6 +253,13 @@ These checks require a real NixOS host; the automated CI does not replace them.
 9. Check legacy Live ports, peer inventory, server health and Docker health
    alongside History. In mobile width, verify the detail panel, controls
    and saved icons are readable without horizontal overflow.
+10. Test an icon from HTML `rel=icon`, one from an Apple touch declaration
+    or web manifest, and a fallback from `/favicon.png`. Confirm icons and
+    titles persist when services stop. Inspect help in both History/Pinned;
+    test a loopback-only listener under Docker: failure must be explained,
+    never cause an invented Offline state, and must retain cached icons.
+    Verify generic Hermes/code-server icon fallback is not presented as a
+    verified favicon. Keep these boxes unchecked until observed on NixOS.
 
 Polling cannot discover a process that starts and exits entirely between
 scans. The root HTTP title may be absent on authenticated, JSON-only,

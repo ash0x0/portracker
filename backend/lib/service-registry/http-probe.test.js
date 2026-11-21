@@ -134,7 +134,10 @@ describe('explicit local-host probe policy', () => {
       const meta = await probeWebMetadata({ host: '127.0.0.1', port });
       expect(meta.title).toBe('Private App');
       expect(meta.iconBytes).toBeNull();
-      expect(visits).toEqual(['/']);
+      expect(visits[0]).toBe('/');
+      expect(visits.length).toBeLessThanOrEqual(6);
+      expect(visits.every(path => path === '/' ||
+        /^\/(favicon\.(ico|png)|apple-touch-icon\.png|icon\.png)$/.test(path))).toBe(true);
     });
   });
 
@@ -186,4 +189,105 @@ describe('explicit local-host probe policy', () => {
     await expect(probeWebMetadata({ host: '127.0.0.1', port: 65536 }))
       .rejects.toMatchObject({ code: 'blocked_target' });
   });
+  test('captures Apple touch icons used by local developer dashboards', async () => {
+    const visits = [];
+    await withHttpServer((req, res) => {
+      visits.push(req.url);
+      if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<title>Hermes</title><link rel="apple-touch-icon" href="/assets/apple-icon.png">');
+      } else if (req.url === '/assets/apple-icon.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG);
+      } else { res.writeHead(404); res.end(); }
+    }, async port => {
+      const meta = await probeWebMetadata({ host: '127.0.0.1', port });
+      expect(meta.title).toBe('Hermes');
+      expect(meta.iconBytes.equals(PNG)).toBe(true);
+      expect(visits).toContain('/assets/apple-icon.png');
+    });
+  });
+
+  test('uses a bounded same-origin PWA manifest for web IDE icons', async () => {
+    const visits = [];
+    await withHttpServer((req, res) => {
+      visits.push(req.url);
+      if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<title>code-server</title><link rel="manifest" href="/site.webmanifest">');
+      } else if (req.url === '/site.webmanifest') {
+        res.writeHead(200, { 'Content-Type': 'application/manifest+json' });
+        res.end(JSON.stringify({ icons: [{ src: '/assets/code-192.png', sizes: '192x192' }] }));
+      } else if (req.url === '/assets/code-192.png') {
+        res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG);
+      } else { res.writeHead(404); res.end(); }
+    }, async port => {
+      const meta = await probeWebMetadata({ host: '127.0.0.1', port });
+      expect(meta.iconBytes.equals(PNG)).toBe(true);
+      expect(visits).toEqual(['/', '/site.webmanifest', '/assets/code-192.png']);
+    });
+  });
+
+  test('tries favicon.png after absent favicon.ico and supports icon-only auth roots', async () => {
+    for (const rootStatus of [200, 401]) {
+      const visits = [];
+      await withHttpServer((req, res) => {
+        visits.push(req.url);
+        if (req.url === '/') {
+          res.writeHead(rootStatus, { 'Content-Type': rootStatus === 200 ? 'text/html' : 'text/plain' });
+          res.end(rootStatus === 200 ? '<title>VS Code</title>' : 'Login required');
+        } else if (req.url === '/favicon.png') {
+          res.writeHead(200, { 'Content-Type': 'image/png' }); res.end(PNG);
+        } else { res.writeHead(404); res.end(); }
+      }, async port => {
+        const meta = await probeWebMetadata({ host: '127.0.0.1', port });
+        expect(meta.title).toBe(rootStatus === 200 ? 'VS Code' : '');
+        expect(meta.iconBytes.equals(PNG)).toBe(true);
+        expect(visits).toEqual(['/', '/favicon.ico', '/favicon.png']);
+      });
+    }
+  });
+
+  test('accepts extensionless local icon route with verified raster bytes', async () => {
+    await withHttpServer((req, res) => {
+      if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<title>IDE</title><link rel="icon" href="/api/favicon?rev=4">');
+      } else if (req.url === '/api/favicon?rev=4') {
+        res.writeHead(200, { 'Content-Type': 'application/octet-stream' }); res.end(PNG);
+      } else { res.writeHead(404); res.end(); }
+    }, async port => {
+      const meta = await probeWebMetadata({ host: '127.0.0.1', port });
+      expect(meta.iconBytes.equals(PNG)).toBe(true);
+      expect(meta.iconType).toBe('image/png');
+    });
+  });
+
+  test('never executes SVG, cross-origin manifest icons or unbounded candidate lists', async () => {
+    const visits = [];
+    await withHttpServer((req, res) => {
+      visits.push(req.url);
+      if (req.url === '/') {
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end('<title>Safe</title><link rel="manifest" href="/manifest.json">' +
+          Array.from({ length: 10 }, (_, i) =>
+            '<link rel="icon" href="/assets/icon-' + i + '.png">').join(''));
+      } else if (req.url === '/manifest.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ icons: [
+          { src: 'http://169.254.169.254/admin.png' }, { src: '/unsafe.svg' },
+        ] }));
+      } else {
+        res.writeHead(200, { 'Content-Type': 'image/svg+xml' });
+        res.end('<svg xmlns="http://www.w3.org/2000/svg"/>');
+      }
+    }, async port => {
+      const meta = await probeWebMetadata({ host: '127.0.0.1', port });
+      expect(meta.title).toBe('Safe');
+      expect(meta.iconBytes).toBeNull();
+      expect(visits.length).toBeLessThanOrEqual(7);
+      expect(visits.every(url => url.startsWith('/'))).toBe(true);
+      expect(visits).not.toContain('/unsafe.svg');
+    });
+  });
+
 });

@@ -65,7 +65,18 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
       return json({ enabled: true, sources: [
         { source: 'system', outcome: 'complete', lastSuccessAt: 1730000000000 },
         { source: 'docker', outcome: 'failed', lastSuccessAt: 1729990000000 },
-      ] });
+      ], capabilities: {
+        http: {
+          requested: true, configured: true, available: true, mode: 'docker_gateway',
+          lastAttemptAt: 1730000000000, lastSuccessAt: 1730000000000,
+          lastIconSuccessAt: 1729999999000, lastFailureCode: 'no_metadata',
+        },
+        docker: {
+          requested: true, configured: true, available: false,
+          mode: 'restricted_proxy', reason: 'docker_api_unavailable',
+          lastAttemptAt: 1730000000000, lastSuccessAt: 1729990000000,
+        },
+      } });
     }
     if (suffix === '/pinned-groups' && req.method() === 'GET') {
       return json(fixturePinnedGroups(records, uri.searchParams));

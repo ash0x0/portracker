@@ -39,6 +39,22 @@ describe('optional HTTP metadata worker', () => {
     });
   });
 
+  test('reports last successfully cached icon separately from title-only probes', async () => {
+    const worker = createHttpMetadataWorker({
+      enabled: true, host: '127.0.0.1', now: () => 46000,
+      store: {
+        getCandidates: () => [{ service_id: 'icon-service', host_port: 3000 }],
+        recordSuccess: () => ({ iconHash: 'a'.repeat(64) }),
+      },
+      probe: async () => ({
+        title: '', rootUrl: 'http://127.0.0.1:3000/',
+        iconBytes: Buffer.from('icon-fixture'), iconType: 'image/png',
+      }),
+    });
+    await worker.enrich();
+    expect(worker.getStatus().lastIconSuccessAt).toBe(46000);
+  });
+
   test('overlapping scan callbacks do not duplicate pending metadata requests', async () => {
     let resolve;
     const gate = new Promise(done => { resolve = done; });

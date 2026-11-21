@@ -1,5 +1,6 @@
 import React from "react";
-import { Container, Pin, Server } from "lucide-react";
+import { Pin } from "lucide-react";
+import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { RegistryServiceDetails } from "./RegistryServiceDetails";
 import {
   SERVICE_CARD_CLASS, SERVICE_CARD_HEADER_CLASS, SERVICE_CARD_BODY_CLASS,
@@ -71,12 +72,8 @@ export function RegistryPinnedGroup({
           " w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <ServiceListChevron expanded={expanded} />
-          {group.iconHash
-            ? <img alt="" src={"/api/service-registry/icons/" + group.iconHash}
-                width="24" height="24" className="h-6 w-6 shrink-0 object-contain" />
-            : group.sources.includes("docker")
-              ? <Container aria-hidden="true" className="h-6 w-6 shrink-0 text-blue-500" />
-              : <Server aria-hidden="true" className="h-6 w-6 shrink-0 text-slate-500" />}
+          <RegistryServiceIcon iconHash={group.iconHash} name={group.name}
+            source={group.sources.includes("docker") ? "docker" : "system"} />
           <SavedServiceStatusDot status={group.status} />
           <span className="min-w-0 flex-1">
             <span data-service-list-title className={SERVICE_CARD_TITLE_CLASS + " block truncate"}>{group.name}</span>

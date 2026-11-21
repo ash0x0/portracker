@@ -22,6 +22,7 @@ function readDiscoveryCapabilities({ scanEnabled = false, scanSources = [],
       reason: !scanEnabled ? 'registry_disabled' : http.reason || null,
       lastAttemptAt: lastHttp.lastAttemptAt || null,
       lastSuccessAt: lastHttp.lastSuccessAt || null,
+      lastIconSuccessAt: lastHttp.lastIconSuccessAt || null,
       lastFailureCode: lastHttp.lastFailureCode || null,
     },
     docker: {
