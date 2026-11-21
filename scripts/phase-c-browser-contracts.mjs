@@ -3,6 +3,7 @@ import { createRegistryHistoryFixture } from './registry-history-fixture.mjs';
 import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
 import { phase4VisualContracts } from './phase-4-browser-contracts.mjs';
 import { phase5IconHelpContracts } from './phase-5-browser-contracts.mjs';
+import { assertRegistryReloadBehavior } from './registry-reload-browser-contracts.mjs';
 
 export async function phaseCContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
@@ -20,6 +21,7 @@ export async function phaseCContracts(context, options) {
     await phase5IconHelpContracts(page);
     const group = page.getByRole('button', { name: 'demo-group service group' });
     await group.waitFor();
+    await assertRegistryReloadBehavior(page, '/api/service-registry/pinned-groups');
     assert.equal(await page.locator('[data-pinned-group]').count(), 1,
       'Two verified Compose services should produce one project row');
     assert.equal(await group.getByText('54321', { exact: true }).count(), 1,
