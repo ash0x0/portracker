@@ -116,6 +116,16 @@ export async function appearanceBrowserContracts(context, options) {
     assert.equal(records[95].appearance.icon.name, 'database');
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Home utility service group' }).waitFor();
+    await page.getByRole('textbox', { name: 'Search pinned services' }).fill('Home utility');
+    await page.getByRole('button', { name: 'Home utility service group' }).click();
+    await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
+    await nativeForm.getByRole('textbox', { name: 'Display name' }).fill('My native host');
+    await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
+    await nativeForm.waitFor({ state: 'hidden' });
+    await page.getByRole('button', { name: 'Reload list', exact: true }).click();
+    await page.getByRole('button', { name: 'My native host service group' }).waitFor();
+    await page.getByRole('button', { name: 'Clear name filter' }).click();
+    await page.getByRole('button', { name: 'My native host service group' }).waitFor();
   } finally {
     await page.evaluate(() => localStorage.setItem('portrackerActiveView', 'live'))
       .catch(() => undefined);

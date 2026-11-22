@@ -206,9 +206,11 @@ Custom service labels/icons also appear in History and service details and
 remain visible while a service is Offline.
 
 Editing neither executes recovery commands nor performs a discovery scan.
-The 30-second list reload does not overwrite an open edit form. Saving an
-alias can change whether the item matches the current search or filters;
-clear the name filter or adjust filters to find the renamed item.
+The 30-second list reload does not overwrite an open edit form. If a renamed
+item no longer matches the active name filter, it is temporarily retained
+outside filtered results with an explanation and Clear name filter action.
+It disappears from this temporary view when filters or pagination change;
+server-reported counts and unrelated results remain unchanged.
 
 ### Browser acceptance
 
