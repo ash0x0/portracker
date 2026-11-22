@@ -19,7 +19,7 @@ afterAll(() => {
   else process.env.DATABASE_PATH = originalDatabasePath;
 });
 
-async function withServer(run) {
+async function withServer(run, authenticated = false) {
   const oldAuth = process.env.ENABLE_AUTH;
   const db = new Database(':memory:');
   const registry = createServiceRegistry(db);
@@ -29,6 +29,10 @@ async function withServer(run) {
   const recoveryNotesStore = createRecoveryNotesStore(db);
   const app = express();
   app.use(express.json());
+  if (authenticated) app.use((req, _res, next) => {
+    req.session = { userId: 'test-session' };
+    next();
+  });
   app.use('/api/service-registry', createRegistryRouter(registry, { httpStore, provenanceStore, dockerProvenanceStore, recoveryNotesStore }));
   const server = await new Promise((resolve) => {
     const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
@@ -350,4 +354,104 @@ describe('authenticated recovery notes API', () => {
       })).status).toBe(401);
     }
   ));
+});
+
+
+describe('authenticated appearance PATCH API', () => {
+  const patch = (url, body, headers = {}) => fetch(url, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+
+  test('anonymous access and auth-disabled writes are rejected', async () =>
+    withServer(async ({ registry, url }) => {
+      const record = registry.observe({
+        host_ip: '127.0.0.1', host_port: 4181, protocol: 'tcp', owner: 'node', pid: 1,
+      });
+      process.env.ENABLE_AUTH = 'false';
+      expect((await patch(url + '/' + record.id + '/appearance', {
+        name: 'Not permitted', revision: 0,
+      })).status).toBe(403);
+      process.env.ENABLE_AUTH = 'true';
+      expect((await patch(url + '/' + record.id + '/appearance', {
+        name: 'Not permitted', revision: 0,
+      })).status).toBe(401);
+      expect((await patch(url + '/pinned-groups/compose:' + 'a'.repeat(32) + '/appearance', {
+        name: 'Not permitted', revision: 0,
+      })).status).toBe(401);
+      expect(registry.getService(record.id).customName).toBeNull();
+    }));
+
+  test('authenticated session saves/resets service name and enforces optimistic revision', async () =>
+    withServer(async ({ registry, url }) => {
+      process.env.ENABLE_AUTH = 'true';
+      const record = registry.observe({
+        host_ip: '127.0.0.1', host_port: 4181, protocol: 'tcp', owner: 'node', pid: 2,
+      });
+      const endpoint = url + '/' + record.id + '/appearance';
+      expect((await patch(endpoint, { name: '', revision: 0 })).status).toBe(400);
+      expect((await patch(endpoint, { name: 'Valid' })).status).toBe(400);
+      expect((await patch(endpoint, { name: '\u202espoof', revision: 0 })).status).toBe(400);
+      expect((await patch(url + '/missing/appearance', {
+        name: 'Missing', revision: 0,
+      })).status).toBe(404);
+      expect((await patch(endpoint, { name: 'Blocked origin', revision: 0 },
+        { Origin: 'https://attacker.invalid' })).status).toBe(403);
+
+      const saved = await patch(endpoint, { name: '  Internal dashboard  ', revision: 0 },
+        { Origin: new URL(url).origin });
+      expect(saved.status).toBe(200);
+      expect(saved.headers.get('cache-control')).toBe('no-store');
+      expect(await saved.json()).toMatchObject({
+        displayName: 'Internal dashboard', detectedName: 'node',
+        customName: 'Internal dashboard', appearanceRevision: 1,
+      });
+      expect((await patch(endpoint, { name: 'Stale edit', revision: 0 })).status).toBe(409);
+      expect((await (await fetch(url + '?search=internal')).json()).total).toBe(1);
+      const reset = await patch(endpoint, { name: null, revision: 1 });
+      expect(reset.status).toBe(200);
+      expect(await reset.json()).toMatchObject({
+        displayName: 'node', customName: null, appearanceRevision: 2,
+      });
+      expect((await (await fetch(url + '/' + record.id)).json()).displayName).toBe('node');
+    }, true));
+
+  test('Compose parent writes never change child names and require verified membership', async () =>
+    withServer(async ({ registry, dockerProvenanceStore, url }) => {
+      process.env.ENABLE_AUTH = 'true';
+      const create = (char, port) => {
+        const item = registry.observe({
+          host_ip: '127.0.0.1', host_port: port, protocol: 'tcp',
+          source: 'docker', owner: char, container_id: char.repeat(12),
+        });
+        dockerProvenanceStore.record(item.id, {
+          containerId: char.repeat(64), containerName: char, image: 'nginx:stable',
+          composeProject: 'alpha', composeService: char, hostFingerprint: 'd'.repeat(64),
+        });
+        registry.setPinned(item.id, true);
+        return item;
+      };
+      const a = create('a', 4181);
+      const b = create('b', 5182);
+      const group = registry.listPinnedGroups().items[0];
+      const groupUrl = url + '/pinned-groups/' + group.id + '/appearance';
+      expect((await patch(groupUrl, { name: 'Project Hub', revision: 0 })).status).toBe(200);
+      expect((await (await fetch(url + '/pinned-groups?search=Project%20Hub')).json())
+        .serviceTotal).toBe(2);
+      expect((await (await fetch(url + '/pinned-groups?search=Project%20Hub&portPrefix=41')).json())
+        .serviceTotal).toBe(1);
+      expect(registry.getService(a.id).customName).toBeNull();
+      expect(registry.getService(b.id).customName).toBeNull();
+      expect((await patch(url + '/' + a.id + '/appearance',
+        { name: 'API worker', revision: 0 })).status).toBe(200);
+      const renamed = registry.listPinnedGroups().items[0];
+      expect(renamed.name).toBe('Project Hub');
+      expect(renamed.services.find(s => s.id === a.id).displayName).toBe('API worker');
+      expect(renamed.services.find(s => s.id === b.id).displayName).toBe('b');
+      expect((await patch(groupUrl, { name: 'Stale', revision: 0 })).status).toBe(409);
+      expect((await patch(url + '/pinned-groups/compose:' + 'f'.repeat(32) +
+        '/appearance', { name: 'Unknown', revision: 0 })).status).toBe(404);
+      expect((await patch(url + '/pinned-groups/service:' + a.id +
+        '/appearance', { name: 'Not a Compose group', revision: 0 })).status).toBe(400);
+    }, true));
 });
