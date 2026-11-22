@@ -56,7 +56,7 @@ function createAppearanceStore(db) {
       error.code = 'appearance_conflict';
       throw error;
     }
-    const updated = current?.name !== name;
+    const updated = (current?.name ?? null) !== name;
     const nextRevision = priorRevision + (updated ? 1 : 0);
     const updatedAt = updated ? Date.now() : (current?.updated_at ?? null);
     if (updated) {
@@ -78,10 +78,18 @@ function createAppearanceStore(db) {
     update('group', id, patch, detectedName)
   );
 
-  function groupAppearances() {
-    return new Map(db.prepare(
-      'SELECT group_id, name, revision, updated_at FROM registry_group_appearance'
-    ).all().map(row => [row.group_id, row]));
+  function groupAppearances(ids) {
+    const result = new Map();
+    // Fetch only active presentation groups, never the entire dormant history.
+    for (let offset = 0; offset < ids.length; offset += 200) {
+      const batch = ids.slice(offset, offset + 200);
+      const statement = db.prepare(
+        'SELECT group_id, name, revision, updated_at FROM registry_group_appearance ' +
+        'WHERE group_id IN (' + batch.map(() => '?').join(',') + ')'
+      );
+      for (const row of statement.all(...batch)) result.set(row.group_id, row);
+    }
+    return result;
   }
 
   return { saveServiceName, saveGroupName, groupAppearances };

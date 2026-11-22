@@ -342,7 +342,10 @@ function createServiceRegistry(db) {
     }
     const endpoints = pinnedEndpoints.all(serverId);
     const provenance = pinnedProvenance.all(serverId);
-    const groupNames = appearance.groupAppearances();
+    const rawGroups = groupPinnedServices(services, endpoints, provenance);
+    const groupNames = appearance.groupAppearances(
+      rawGroups.filter(group => group.kind === 'compose').map(group => group.id)
+    );
     const decorate = group => {
       if (group.kind !== 'compose') return group;
       const override = groupNames.get(group.id);
@@ -354,7 +357,7 @@ function createServiceRegistry(db) {
         appearanceUpdatedAt: override?.updated_at ?? null,
       };
     };
-    const unfiltered = groupPinnedServices(services, endpoints, provenance).map(decorate);
+    const unfiltered = rawGroups.map(decorate);
     let matches = services;
     if (search) {
       const term = search.toLocaleLowerCase();
@@ -425,6 +428,7 @@ function createServiceRegistry(db) {
       .run(id, id);
     db.prepare('DELETE FROM registry_process_runs WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_recovery_notes WHERE service_id = ?').run(id);
+    db.prepare('DELETE FROM registry_service_appearance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_docker_provenance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_linux_provenance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_http_metadata WHERE service_id = ?').run(id);
