@@ -39,7 +39,7 @@ function GroupMemberSelector({ group, selectedId, onSelect }) {
               ? "border-l-2 border-indigo-500 bg-slate-50 dark:bg-slate-800/70"
               : "hover:bg-slate-50 dark:hover:bg-slate-800")}>
           <span className={SERVICE_CARD_TITLE_CLASS}>
-            {service.composeService || service.displayName}
+            {service.customName || service.composeService || service.displayName}
           </span>
           <span className="flex flex-wrap gap-1">
             {service.endpoints.slice(0, 5).map(endpoint =>

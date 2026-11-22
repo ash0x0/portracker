@@ -225,6 +225,25 @@ function migrateRegistrySchema(db) {
     ].join('\n'));
     db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
       .run(10, Date.now());
+    // Additive v11: user-authored presentation names never modify discovered
+    // identity, provenance, port ownership or registry_services.display_name.
+    // Keep rows on reset to retain a monotonic optimistic revision.
+    db.exec([
+      'CREATE TABLE IF NOT EXISTS registry_service_appearance (',
+      '  service_id TEXT PRIMARY KEY REFERENCES registry_services(id) ON DELETE CASCADE,',
+      '  name TEXT,',
+      '  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),',
+      '  updated_at INTEGER NOT NULL',
+      ');',
+      'CREATE TABLE IF NOT EXISTS registry_group_appearance (',
+      '  group_id TEXT PRIMARY KEY,',
+      '  name TEXT,',
+      '  revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0),',
+      '  updated_at INTEGER NOT NULL',
+      ');',
+    ].join('\n'));
+    db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
+      .run(11, Date.now());
   });
   migrate();
 }
