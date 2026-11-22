@@ -1,13 +1,13 @@
 'use strict';
 
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAllowedOrigin } = require('../middleware/auth');
 const { buildRecoveryRecipes } = require('../lib/service-registry/recovery-recipes');
 
 function createRegistryRouter(registry, {
   scanEnabled = false, scanner = null, httpStore = null, provenanceStore = null,
   dockerProvenanceStore = null, recoveryNotesStore = null,
-  getCapabilities = null,
+  customIconStore = null, getCapabilities = null,
 } = {}) {
   const router = express.Router();
 
@@ -137,6 +137,54 @@ function createRegistryRouter(registry, {
       return res.send(icon.bytes);
     } catch {
       return res.status(500).json({ error: 'Unable to load cached icon' });
+    }
+  });
+
+  // Route-specific raw body parser: no base64 in JSON, no remote URL/path.
+  // Mutations require a signed-in session and the same-origin protection.
+  const receiveIcon = express.raw({
+    type: () => true, limit: 128 * 1024, inflate: false,
+  });
+  router.post('/custom-icons', requireAllowedOrigin, requireAuth, (req, res, next) => {
+    if (process.env.ENABLE_AUTH !== 'true' || !customIconStore) {
+      return res.status(403).json({ error: 'Authenticated custom icon uploads are disabled' });
+    }
+    return receiveIcon(req, res, next);
+  }, (req, res) => {
+    try {
+      if (!Buffer.isBuffer(req.body)) throw new TypeError('Expected a binary image body');
+      const result = customIconStore.save(req.body, req.headers['content-type']);
+      res.set('Cache-Control', 'no-store');
+      return res.status(201).json(result);
+    } catch (error) {
+      if (error.code === 'custom_icon_capacity') {
+        return res.status(507).json({ error: error.message });
+      }
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to store custom icon' });
+    }
+  }, (error, _req, res, next) => {
+    if (!error) return next();
+    if (error.type === 'entity.too.large') {
+      return res.status(413).json({ error: 'Image must be at most 128 KiB' });
+    }
+    return res.status(400).json({ error: 'Unable to read binary image' });
+  });
+
+  router.get('/custom-icons/:hash', requireAuth, (req, res) => {
+    try {
+      const icon = customIconStore?.get(req.params.hash);
+      if (!icon) return res.status(404).json({ error: 'Custom icon not found' });
+      res.set({
+        'Cache-Control': 'private, max-age=86400',
+        'X-Content-Type-Options': 'nosniff',
+        'Cross-Origin-Resource-Policy': 'same-origin',
+        'Content-Security-Policy': "default-src 'none'",
+        'Content-Type': icon.mime,
+      });
+      return res.send(icon.bytes);
+    } catch {
+      return res.status(500).json({ error: 'Unable to load custom icon' });
     }
   });
 
