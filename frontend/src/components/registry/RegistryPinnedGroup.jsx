@@ -1,5 +1,6 @@
 import React from "react";
-import { Pin } from "lucide-react";
+import { Pencil, Pin } from "lucide-react";
+import { RegistryAppearanceEditor } from "./RegistryAppearanceEditor";
 import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { RegistryServiceDetails } from "./RegistryServiceDetails";
 import {
@@ -26,14 +27,14 @@ function SourceIndicator({ group }) {
   );
 }
 
-function GroupMemberSelector({ group, selectedId, onSelect }) {
+function GroupMemberSelector({ group, selectedId, onSelect, disabled = false }) {
   if (group.services.length < 2) return null;
   return (
     <div className="divide-y divide-slate-100 dark:divide-slate-700"
       aria-label="Services in Compose project">
       {group.services.map(service => (
         <button key={service.id} type="button" onClick={() => onSelect(service.id)}
-          aria-pressed={selectedId === service.id}
+          disabled={disabled} aria-pressed={selectedId === service.id}
           className={"flex w-full flex-wrap items-center justify-between gap-2 px-3 py-3 text-left text-sm transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 " +
             (selectedId === service.id
               ? "border-l-2 border-indigo-500 bg-slate-50 dark:bg-slate-800/70"
@@ -59,7 +60,9 @@ function GroupMemberSelector({ group, selectedId, onSelect }) {
 
 export function RegistryPinnedGroup({
   group, expanded, selectedId, detail, detailError, onToggle, onSelect,
-  onPinToggle, onForget, onClose, pinBusy, forgetting,
+  onPinToggle, onForget, onClose, onEditGroup, onEditService,
+  editor, onSaveAppearance, onCancelAppearance, onReloadAppearance,
+  pinBusy, forgetting,
 }) {
   const selected = group.services.find(service => service.id === selectedId);
   return (
@@ -72,7 +75,7 @@ export function RegistryPinnedGroup({
           " w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <ServiceListChevron expanded={expanded} />
-          <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice} name={group.name}
+          <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice} name={group.detectedName || group.name}
             source={group.sources.includes("docker") ? "docker" : "system"} />
           <SavedServiceStatusDot status={group.status} />
           <span className="min-w-0 flex-1">
@@ -91,6 +94,21 @@ export function RegistryPinnedGroup({
       </button>
       {expanded && (
         <div className={SERVICE_CARD_BODY_CLASS + " min-w-0 space-y-4 p-4"}>
+          <div className="flex flex-wrap justify-end gap-2">
+            <button type="button" disabled={Boolean(editor)} onClick={() => onEditGroup(group)}
+              aria-label={group.kind === "compose"
+                ? "Edit Compose project appearance" : "Edit appearance"}
+              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700">
+              <Pencil className="h-4 w-4" aria-hidden="true" />
+              {group.kind === "compose" ? "Edit project appearance" : "Edit appearance"}
+            </button>
+          </div>
+          {editor && (
+            <RegistryAppearanceEditor key={editor.scope + ":" + editor.id}
+              item={editor.item} scope={editor.scope}
+              onSave={onSaveAppearance} onCancel={onCancelAppearance}
+              onReload={onReloadAppearance} />
+          )}
           {group.ports.length > 0 && (
             <div aria-label="All remembered group ports" className="flex flex-wrap items-center gap-2">
               <span className={SERVICE_CARD_META_CLASS}>Ports</span>
@@ -99,7 +117,8 @@ export function RegistryPinnedGroup({
               ))}
             </div>
           )}
-          <GroupMemberSelector group={group} selectedId={selectedId} onSelect={onSelect} />
+          <GroupMemberSelector group={group} selectedId={selectedId} onSelect={onSelect}
+            disabled={Boolean(editor)} />
           {selected && (
             <RegistryServiceDetails
               detail={detail?.id === selected.id ? detail : null}
@@ -109,6 +128,8 @@ export function RegistryPinnedGroup({
               onClose={onClose}
               pinBusy={pinBusy}
               forgetting={forgetting}
+              onEditAppearance={group.kind === "compose" && !editor ? onEditService : null}
+              editLabel="Edit selected service"
             />
           )}
         </div>

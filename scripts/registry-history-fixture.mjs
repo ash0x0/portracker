@@ -16,7 +16,7 @@ function fixtureEndpoints(row) {
   }));
 }
 
-function fixturePinnedGroups(records, query) {
+function fixturePinnedGroups(records, query, groupAppearance = new Map()) {
   const search = (query.get('search') || '').toLowerCase();
   const status = query.get('status');
   const source = query.get('source');
@@ -38,13 +38,29 @@ function fixturePinnedGroups(records, query) {
     identity_confidence: 'verified',
   }));
   const groups = groupPinnedServices(pinned, pinned.flatMap(fixtureEndpoints), provenance);
+  for (const group of groups) {
+    const appearance = group.kind === 'compose' ? groupAppearance.get(group.id) : null;
+    if (appearance) {
+      group.detectedName = 'demo-group';
+      group.name = appearance.name || group.detectedName;
+      group.appearance = appearance;
+      group.iconChoice = appearance.icon;
+    } else if (group.kind === 'service') {
+      group.detectedName = group.services[0].detectedName;
+      group.appearance = group.services[0].appearance;
+      group.iconChoice = group.services[0].appearance.icon;
+    } else {
+      group.detectedName = 'demo-group';
+      group.appearance = { revision: 0, icon: { type: 'automatic' } };
+    }
+  }
   const offset = Number(query.get('offset') || 0);
   const limit = Number(query.get('limit') || 24);
   return { items: groups.slice(offset, offset + limit), total: groups.length,
     serviceTotal: pinned.length, offset, limit };
 }
 
-function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
+function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts, groupAppearance) {
   return async route => {
     const req = route.request();
     const uri = new URL(req.url());
@@ -54,6 +70,49 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
       contentType: 'application/json',
       body: JSON.stringify(body),
     });
+    if (suffix.startsWith('/custom-icons/')) {
+      return route.fulfill({
+        status: 200, contentType: 'image/png',
+        body: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WkW3+IAAAAASUVORK5CYII=', 'base64'),
+      });
+    }
+    if (suffix === '/custom-icons' && req.method() === 'POST') {
+      const bytes = req.postDataBuffer();
+      if (!bytes || !bytes.length || bytes.length > 128 * 1024) {
+        return json({ error: 'Invalid icon size' }, 400);
+      }
+      return json({ hash: 'b'.repeat(64) }, 201);
+    }
+    if (req.method() === 'PATCH' && suffix.endsWith('/appearance')) {
+      const payload = req.postDataJSON();
+      const isGroup = suffix.startsWith('/pinned-groups/');
+      const id = decodeURIComponent(suffix.slice(
+        isGroup ? '/pinned-groups/'.length : 1, -'/appearance'.length));
+      const item = isGroup ? fixturePinnedGroups(
+        records, new URLSearchParams(), groupAppearance).items.find(group =>
+        group.kind === 'compose' && group.id === id)
+        : records.find(row => row.id === id);
+      if (!item) return json({ error: 'Appearance target not found' }, 404);
+      const current = isGroup ? groupAppearance.get(id) ||
+        { revision: 0, icon: { type: 'automatic' }, name: null } : item.appearance;
+      if (payload.revision !== current.revision) {
+        return json({ error: 'Appearance was edited elsewhere' }, 409);
+      }
+      const updated = { ...current, revision: current.revision + 1 };
+      if (Object.hasOwn(payload, 'name')) updated.name = payload.name;
+      if (Object.hasOwn(payload, 'icon')) updated.icon =
+        payload.icon === 'automatic' ? { type: 'automatic' } : payload.icon;
+      if (isGroup) {
+        groupAppearance.set(id, updated);
+        return json({ ...item, name: updated.name || 'demo-group',
+          appearance: updated, appearanceRevision: updated.revision });
+      }
+      item.appearance = updated;
+      item.displayName = updated.name || item.detectedName;
+      item.iconChoice = updated.icon;
+      item.appearanceRevision = updated.revision;
+      return json(item);
+    }
     if (suffix.startsWith('/icons/')) {
       return route.fulfill({
         status: 200, contentType: 'image/png',
@@ -79,7 +138,7 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts) {
       } });
     }
     if (suffix === '/pinned-groups' && req.method() === 'GET') {
-      return json(fixturePinnedGroups(records, uri.searchParams));
+      return json(fixturePinnedGroups(records, uri.searchParams, groupAppearance));
     }
     if (req.method() === 'PUT' && suffix.endsWith('/pin')) {
       const id = decodeURIComponent(suffix.slice(1, -4));
@@ -178,6 +237,10 @@ export function createRegistryHistoryFixture() {
     id: 'history-fixture-' + index,
     serverId: 'local',
     displayName: index === 104 ? 'example-unknown' : 'example-service-' + index,
+    detectedName: index === 104 ? 'example-unknown' : 'example-service-' + index,
+    appearance: { revision: 0, name: null, icon: { type: 'automatic' } },
+    iconChoice: { type: 'automatic' },
+    appearanceRevision: 0,
     source: index % 3 === 0 ? 'docker' : 'system',
     identityConfidence: 'uncertain',
     firstSeenAt: 1730000000000,
@@ -194,6 +257,7 @@ export function createRegistryHistoryFixture() {
     iconHash: index === 79 ? 'a'.repeat(64) : null,
     metadataFetchedAt: index === 79 ? 1730000000000 : null,
   }));
+  const groupAppearance = new Map();
   const recoveryNotes = new Map();
   const recoveryStarts = new Map();
   recoveryStarts.set('history-fixture-78', {
@@ -201,6 +265,6 @@ export function createRegistryHistoryFixture() {
     line: "cd -- '/home/dev/demo' && docker compose up -d web", version: 1,
   });
   const urlPattern = '**/api/service-registry**';
-  const handleRegistryRequest = createRegistryRequestHandler(records, recoveryNotes, recoveryStarts);
+  const handleRegistryRequest = createRegistryRequestHandler(records, recoveryNotes, recoveryStarts, groupAppearance);
   return { records, urlPattern, handleRegistryRequest };
 }

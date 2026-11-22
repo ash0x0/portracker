@@ -7,6 +7,7 @@ import {
 import {
   forgetRegistryService, getRegistryPinnedGroups, getRegistryScanStatus,
   getRegistryService, scanRegistryNow, setRegistryServicePinned,
+  saveRegistryServiceAppearance, saveRegistryComposeAppearance,
 } from "../../lib/api/serviceRegistry";
 import { PAGE_SIZE, parseRegistryPortPrefix, registryPageCount } from "../../lib/registry-utils.mjs";
 import { RegistryPinnedGroup } from "./RegistryPinnedGroup";
@@ -70,6 +71,9 @@ export function RegistryPinned({ onBrowseHistory }) {
   const [pinError, setPinError] = useState("");
   const [forgetting, setForgetting] = useState(false);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
+  const [editor, setEditor] = useState(null);
+  const editorRef = useRef(null);
+  const [appearanceMessage, setAppearanceMessage] = useState("");
   const root = useRef(null);
   const savedScroll = useRef(null);
 
@@ -101,7 +105,9 @@ export function RegistryPinned({ onBrowseHistory }) {
     }, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       loaded.current = true;
-      setData(result);
+      // Keep the currently expanded row and its draft mounted during polling.
+      // Refresh the list once Save/Cancel closes the editor.
+      if (!editorRef.current) setData(result);
       setLoading(false);
     }).catch(failure => {
       if (controller.signal.aborted) return;
@@ -140,7 +146,92 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = null;
   }, [data, page, selectedId]);
 
+  const closeEditor = () => {
+    editorRef.current = null;
+    setEditor(null);
+    refresh();
+  };
+
+  const openEditor = (scope, item, groupId) => {
+    const target = { scope, id: item.id, groupId, item };
+    editorRef.current = target;
+    setEditor(target);
+    setAppearanceMessage("");
+  };
+
+  const editGroup = group => {
+    if (group.kind === "compose") openEditor("compose", group, group.id);
+    else if (group.services[0]) openEditor("service", group.services[0], group.id);
+  };
+
+  const editService = service => {
+    const group = data.items.find(item =>
+      item.services.some(member => member.id === service.id));
+    if (group) openEditor("service", group.services.find(member => member.id === service.id) || service, group.id);
+  };
+
+  const saveAppearance = async patch => {
+    const target = editorRef.current;
+    if (!target) return;
+    savedScroll.current = scrollSnapshot(root.current);
+    try {
+      const saved = target.scope === "compose"
+        ? await saveRegistryComposeAppearance(target.id, patch)
+        : await saveRegistryServiceAppearance(target.id, patch);
+      const updated = current => {
+        if (!current || current.id !== target.id) return current;
+        const name = Object.hasOwn(patch, "name")
+          ? (patch.name === null
+            ? (saved?.detectedName || current.detectedName ||
+              current.appearance?.detectedName || current.displayName || current.name)
+            : patch.name)
+          : (current.displayName || current.name);
+        const iconChoice = patch.icon === "automatic"
+          ? { type: "automatic" } : patch.icon;
+        const appearance = {
+          ...current.appearance,
+          ...(Object.hasOwn(patch, "name") ? { name: patch.name } : {}),
+          ...(Object.hasOwn(patch, "icon") ? { icon: iconChoice } : {}),
+          revision: saved?.appearanceRevision ?? patch.revision + 1,
+        };
+        return {
+          ...current, appearance,
+          appearanceRevision: saved?.appearanceRevision ?? patch.revision + 1,
+          ...(Object.hasOwn(patch, "name")
+            ? (target.scope === "compose" ? { name, customName: patch.name } : { displayName: name, customName: patch.name }) : {}),
+          ...(Object.hasOwn(patch, "icon") ? { iconChoice } : {}),
+        };
+      };
+      setData(previous => ({
+        ...previous,
+        items: previous.items.map(group => {
+          if (target.scope === "compose") return updated(group);
+          if (!group.services.some(service => service.id === target.id)) return group;
+          const services = group.services.map(updated);
+          return {
+            ...group, services,
+            ...(group.kind === "service" ? {
+              name: services[0].displayName,
+              appearance: services[0].appearance,
+              iconChoice: services[0].iconChoice,
+            } : {}),
+          };
+        }),
+      }));
+      if (target.scope === "service") setDetail(previous => updated(previous));
+      editorRef.current = null;
+      setEditor(null);
+      setAppearanceMessage("Appearance saved. If the edited item disappears, " +
+        "it may no longer match the current search or filters; clear filters to find it.");
+      refresh();
+    } catch (failure) {
+      savedScroll.current = null;
+      throw failure;
+    }
+  };
+
   const toggleGroup = group => {
+    if (editorRef.current) closeEditor();
     if (expandedGroupId === group.id) {
       setExpandedGroupId(null);
       setSelectedId(null);
@@ -252,6 +343,15 @@ export function RegistryPinned({ onBrowseHistory }) {
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scan && !scan.enabled && <p className="text-sm text-amber-600">Discovery is disabled. Saved pins remain accessible.</p>}
       {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
+      {appearanceMessage && (
+        <p role="status" className="text-sm text-indigo-700 dark:text-indigo-300">
+          {appearanceMessage}
+          <button type="button" className="ml-2 underline focus-visible:outline-2"
+            onClick={() => { setQuery(""); setSearch(""); setPage(0); refresh(); }}>
+            Clear name filter
+          </button>
+        </p>
+      )}
       <div aria-label="Pinned filters" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <label className="space-y-1 text-sm">
           <span>Name</span>
@@ -329,7 +429,11 @@ export function RegistryPinned({ onBrowseHistory }) {
                 onToggle={toggleGroup} onSelect={setSelectedId}
                 onPinToggle={handleUnpin}
                 onForget={() => setForgetDialogOpen(true)}
-                onClose={() => { setExpandedGroupId(null); setSelectedId(null); }}
+                onClose={() => { setExpandedGroupId(null); setSelectedId(null); closeEditor(); }}
+                onEditGroup={editGroup} onEditService={editService}
+                editor={editor?.groupId === group.id ? editor : null}
+                onSaveAppearance={saveAppearance} onCancelAppearance={closeEditor}
+                onReloadAppearance={closeEditor}
                 pinBusy={pinBusy} forgetting={forgetting}
               />
             ))}
