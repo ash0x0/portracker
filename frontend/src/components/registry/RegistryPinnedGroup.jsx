@@ -72,7 +72,7 @@ export function RegistryPinnedGroup({
           " w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <ServiceListChevron expanded={expanded} />
-          <RegistryServiceIcon iconHash={group.iconHash} name={group.name}
+          <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice} name={group.name}
             source={group.sources.includes("docker") ? "docker" : "system"} />
           <SavedServiceStatusDot status={group.status} />
           <span className="min-w-0 flex-1">

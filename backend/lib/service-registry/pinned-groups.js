@@ -38,6 +38,7 @@ function groupPinnedServices(services, endpoints, evidence) {
         id, name: isVerified ? info.compose_project : service.displayName,
         detectedName: isVerified ? info.compose_project : (service.detectedName || service.displayName),
         customName: isVerified ? null : (service.customName || null),
+        iconChoice: isVerified ? { type: 'automatic' } : (service.iconChoice || { type: 'automatic' }),
         appearanceRevision: isVerified ? 0 : (service.appearanceRevision || 0),
         appearanceUpdatedAt: isVerified ? null : (service.appearanceUpdatedAt || null),
         kind: isVerified ? 'compose' : 'service',

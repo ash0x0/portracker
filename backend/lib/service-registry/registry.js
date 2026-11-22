@@ -5,7 +5,7 @@ const { migrateRegistrySchema } = require('./schema');
 const { normalizeObservation, validServerId, normalizePort } = require('./identity');
 const { createSourceLinks } = require('./source-links');
 const { groupPinnedServices, composeGroupId } = require('./pinned-groups');
-const { createAppearanceStore } = require('./appearance');
+const { createAppearanceStore, decodeIconChoice } = require('./appearance');
 
 function toService(row) {
   if (!row) return null;
@@ -16,6 +16,7 @@ function toService(row) {
     displayName: row.custom_name ?? row.display_name,
     detectedName: row.display_name,
     customName: row.custom_name ?? null,
+    iconChoice: decodeIconChoice(row.custom_icon_choice),
     appearanceRevision: row.appearance_revision ?? 0,
     appearanceUpdatedAt: row.appearance_updated_at ?? null,
     source: row.source,
@@ -175,7 +176,7 @@ function createServiceRegistry(db) {
     return serviceId;
   });
 
-  const appearanceSelect = 's.*, a.name AS custom_name, ' +
+  const appearanceSelect = 's.*, a.name AS custom_name, a.icon_choice AS custom_icon_choice, ' +
     'COALESCE(a.revision, 0) AS appearance_revision, ' +
     'a.updated_at AS appearance_updated_at';
   const appearanceFrom = ' FROM registry_services s ' +
@@ -282,7 +283,7 @@ function createServiceRegistry(db) {
         'AND NOT EXISTS (SELECT 1 FROM registry_recovery_notes n ' +
         "WHERE n.service_id = s.id AND (n.notes <> '' OR n.start_command <> '')) " +
         'AND NOT EXISTS (SELECT 1 FROM registry_service_appearance ua ' +
-        'WHERE ua.service_id = s.id AND ua.name IS NOT NULL))');
+        'WHERE ua.service_id = s.id AND (ua.name IS NOT NULL OR ua.icon_choice IS NOT NULL)))');
     }
     const where = ' WHERE ' + clauses.join(' AND ');
     const count = db.prepare('SELECT COUNT(*) AS total' + appearanceFrom + where)
@@ -353,6 +354,7 @@ function createServiceRegistry(db) {
         ...group,
         name: override?.name ?? group.detectedName,
         customName: override?.name ?? null,
+        iconChoice: decodeIconChoice(override?.icon_choice),
         appearanceRevision: override?.revision ?? 0,
         appearanceUpdatedAt: override?.updated_at ?? null,
       };
@@ -397,11 +399,11 @@ function createServiceRegistry(db) {
     const match = verifiedGroups.all().find(row => composeGroupId(row.server_id, row) === id);
     if (!match) return null;
     return { id, kind: 'compose',
-      ...appearance.saveGroupName(id, patch, match.compose_project) };
+      ...appearance.saveGroupAppearance(id, patch, match.compose_project) };
   }
 
   function setServiceAppearance(id, patch) {
-    const updated = appearance.saveServiceName(id, patch);
+    const updated = appearance.saveServiceAppearance(id, patch);
     return updated ? getService(id) : null;
   }
 
@@ -424,6 +426,7 @@ function createServiceRegistry(db) {
   const forgetOne = db.transaction((id) => {
     const found = getById.get(id);
     if (!found) return false;
+    const oldIcon = appearance.serviceIconBeforeForget(id);
     db.prepare('DELETE FROM registry_source_links WHERE system_service_id = ? OR docker_service_id = ?')
       .run(id, id);
     db.prepare('DELETE FROM registry_process_runs WHERE service_id = ?').run(id);
@@ -434,6 +437,7 @@ function createServiceRegistry(db) {
     db.prepare('DELETE FROM registry_http_metadata WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_endpoints WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_services WHERE id = ?').run(id);
+    appearance.releaseIcon(oldIcon);
     return true;
   });
 

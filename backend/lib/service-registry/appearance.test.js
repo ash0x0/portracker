@@ -42,7 +42,7 @@ describe('durable service and Compose presentation names (schema v11)', () => {
       });
       createServiceRegistry(db);
       expect(db.prepare('SELECT COUNT(*) AS count FROM registry_schema_versions').get().count)
-        .toBe(11);
+        .toBe(12);
       expect(db.prepare('SELECT name FROM sqlite_master ' +
         "WHERE name = 'registry_service_appearance'").get()).toBeDefined();
     }));

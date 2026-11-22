@@ -92,3 +92,15 @@ bucket; size limits for that deployment rather than trusting arbitrary forwarded
 If credentials may have been exposed, restrict access, update to the relevant fixed release,
 rotate affected credentials in their owning services and review their access logs. A passing
 test or an upgrade does not establish whether a past compromise occurred.
+
+### Saved registry custom icon uploads
+
+The saved-service icon upload endpoint is available only with authenticated
+sessions. It accepts bounded, server-validated raster bytes (PNG, JPEG, WebP,
+ICO), never URLs, SVG, HTML or arbitrary file paths. Uploaded blobs live in a
+separate capped SQLite table; they do not share automatic favicon eviction.
+Mutations are subject to origin checks and optimistic appearance revisions.
+Image serving sets `nosniff`, same-origin CORP, a restrictive CSP and private
+caching. This is **not** an image-sanitizing/re-encoding service: only upload
+images you trust. The dashboard remains intended for trusted local access,
+not public hosting.
