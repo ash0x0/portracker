@@ -4,6 +4,17 @@ const { createHash } = require('node:crypto');
 
 // Visual groups are NOT registry identities. Only explicit, verified Compose
 // provenance can combine distinct durable service IDs into a parent row.
+function composeGroupId(serverId, info) {
+  if (info?.identity_confidence !== 'verified' ||
+      !/^[a-f0-9]{64}$/.test(info.daemon_fingerprint || '') ||
+      typeof info.compose_project !== 'string' || info.compose_project.length === 0) {
+    return null;
+  }
+  return 'compose:' + createHash('sha256').update(
+    JSON.stringify([serverId, info.daemon_fingerprint, info.compose_project])
+  ).digest('hex').slice(0, 32);
+}
+
 function groupPinnedServices(services, endpoints, evidence) {
   const perService = new Map();
   for (const endpoint of endpoints) {
@@ -18,16 +29,17 @@ function groupPinnedServices(services, endpoints, evidence) {
   const groups = new Map();
   for (const service of services) {
     const info = provenance.get(service.id);
-    const isVerified = service.source === 'docker' &&
-      info?.identity_confidence === 'verified' &&
-      /^[a-f0-9]{64}$/.test(info.daemon_fingerprint || '') &&
-      typeof info.compose_project === 'string' && info.compose_project.length > 0;
-    const id = isVerified ? 'compose:' + createHash('sha256').update(
-      JSON.stringify([service.serverId, info.daemon_fingerprint, info.compose_project])
-    ).digest('hex').slice(0, 32) : 'service:' + service.id;
+    const composeId = service.source === 'docker'
+      ? composeGroupId(service.serverId, info) : null;
+    const isVerified = Boolean(composeId);
+    const id = composeId || 'service:' + service.id;
     if (!groups.has(id)) {
       groups.set(id, {
         id, name: isVerified ? info.compose_project : service.displayName,
+        detectedName: isVerified ? info.compose_project : (service.detectedName || service.displayName),
+        customName: isVerified ? null : (service.customName || null),
+        appearanceRevision: isVerified ? 0 : (service.appearanceRevision || 0),
+        appearanceUpdatedAt: isVerified ? null : (service.appearanceUpdatedAt || null),
         kind: isVerified ? 'compose' : 'service',
         services: [], ports: [], status: 'listening',
         pinnedAt: 0, lastSeenAt: 0, iconHash: null,
@@ -65,8 +77,9 @@ function groupPinnedServices(services, endpoints, evidence) {
     group.serviceCount = group.services.length;
     group.sources = [...new Set(group.services.flatMap(service =>
       service.sources || [service.source]))];
-    group.services.sort((a, b) => (a.composeService || a.displayName)
-      .localeCompare(b.composeService || b.displayName) || a.id.localeCompare(b.id));
+    group.services.sort((a, b) => (a.customName || a.composeService || a.displayName)
+      .localeCompare(b.customName || b.composeService || b.displayName) ||
+      a.id.localeCompare(b.id));
   }
   const rank = { offline: 0, unknown: 1, listening: 2 };
   return [...groups.values()].sort((a, b) =>
@@ -74,4 +87,4 @@ function groupPinnedServices(services, endpoints, evidence) {
     a.name.localeCompare(b.name) || a.id.localeCompare(b.id));
 }
 
-module.exports = { groupPinnedServices };
+module.exports = { groupPinnedServices, composeGroupId };

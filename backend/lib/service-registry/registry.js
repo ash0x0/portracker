@@ -4,14 +4,20 @@ const { randomUUID } = require('node:crypto');
 const { migrateRegistrySchema } = require('./schema');
 const { normalizeObservation, validServerId, normalizePort } = require('./identity');
 const { createSourceLinks } = require('./source-links');
-const { groupPinnedServices } = require('./pinned-groups');
+const { groupPinnedServices, composeGroupId } = require('./pinned-groups');
+const { createAppearanceStore } = require('./appearance');
 
 function toService(row) {
   if (!row) return null;
   return {
     id: row.id,
     serverId: row.server_id,
-    displayName: row.display_name,
+    // Compatibility: existing clients continue reading displayName.
+    displayName: row.custom_name ?? row.display_name,
+    detectedName: row.display_name,
+    customName: row.custom_name ?? null,
+    appearanceRevision: row.appearance_revision ?? 0,
+    appearanceUpdatedAt: row.appearance_updated_at ?? null,
     source: row.source,
     sources: row.source === 'docker' && row.linked_system_count > 0
       ? ['docker', 'system'] : [row.source],
@@ -62,6 +68,7 @@ function boundedInteger(value, name, fallback, maximum, minimum = 0) {
 function createServiceRegistry(db) {
   migrateRegistrySchema(db);
   const sourceLinks = createSourceLinks(db);
+  const appearance = createAppearanceStore(db);
 
   const findIdentity = db.prepare(
     'SELECT id, status FROM registry_services ' +
@@ -168,7 +175,14 @@ function createServiceRegistry(db) {
     return serviceId;
   });
 
-  const getById = db.prepare('SELECT * FROM registry_services WHERE id = ?');
+  const appearanceSelect = 's.*, a.name AS custom_name, ' +
+    'COALESCE(a.revision, 0) AS appearance_revision, ' +
+    'a.updated_at AS appearance_updated_at';
+  const appearanceFrom = ' FROM registry_services s ' +
+    'LEFT JOIN registry_service_appearance a ON a.service_id = s.id';
+  const getById = db.prepare(
+    'SELECT ' + appearanceSelect + appearanceFrom + ' WHERE s.id = ?'
+  );
   const linkedCount = db.prepare(
     'SELECT COUNT(*) AS n FROM registry_source_links WHERE docker_service_id = ?'
   );
@@ -224,7 +238,7 @@ function createServiceRegistry(db) {
       }
       // Escape LIKE metacharacters so a search is literal and bounded.
       const term = filters.search.replace(/[\\%_]/g, '\\$&');
-      clauses.push("s.display_name LIKE ? ESCAPE '\\'");
+      clauses.push("COALESCE(a.name, s.display_name) LIKE ? ESCAPE '\\'");
       params.push('%' + term + '%');
     }
     if (filters.seenSince !== undefined) {
@@ -266,13 +280,15 @@ function createServiceRegistry(db) {
         'AND EXISTS (SELECT 1 FROM registry_source_links l ' +
         'WHERE l.system_service_id = s.id) ' +
         'AND NOT EXISTS (SELECT 1 FROM registry_recovery_notes n ' +
-        "WHERE n.service_id = s.id AND (n.notes <> '' OR n.start_command <> '')))");
+        "WHERE n.service_id = s.id AND (n.notes <> '' OR n.start_command <> '')) " +
+        'AND NOT EXISTS (SELECT 1 FROM registry_service_appearance ua ' +
+        'WHERE ua.service_id = s.id AND ua.name IS NOT NULL))');
     }
     const where = ' WHERE ' + clauses.join(' AND ');
-    const count = db.prepare('SELECT COUNT(*) AS total FROM registry_services s' + where)
+    const count = db.prepare('SELECT COUNT(*) AS total' + appearanceFrom + where)
       .get(...params).total;
     const items = db.prepare(
-      'SELECT s.*, (SELECT COUNT(*) FROM registry_source_links l ' +
+      'SELECT ' + appearanceSelect + ', (SELECT COUNT(*) FROM registry_source_links l ' +
       'WHERE l.docker_service_id = s.id) AS linked_system_count, ' +
       '(SELECT COUNT(*) FROM registry_endpoints e ' +
       'WHERE e.service_id = s.id) AS endpoint_count, ' +
@@ -282,7 +298,7 @@ function createServiceRegistry(db) {
       'ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS preview_port, ' +
       '(SELECT e.protocol FROM registry_endpoints e WHERE e.service_id = s.id ' +
       'ORDER BY e.last_seen_at DESC, e.id LIMIT 1) AS preview_protocol ' +
-      'FROM registry_services s' + where +
+      appearanceFrom + where +
       (pinnedOnly === true || pinnedOnly === 'true'
         ? " ORDER BY CASE s.status WHEN 'offline' THEN 0 " +
           "WHEN 'unknown' THEN 1 ELSE 2 END, s.pinned_at DESC, " +
@@ -309,24 +325,84 @@ function createServiceRegistry(db) {
     const offset = boundedInteger(filters.offset, 'offset', 0, 1000000);
     const serverId = filters.serverId === undefined ? 'local' : filters.serverId;
     if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
+    const { search, ...baseFilters } = filters;
+    if (search !== undefined && (typeof search !== 'string' || search.length > 100)) {
+      throw new TypeError('Invalid search');
+    }
 
-    // Reuse the exact History filter and source-correlation semantics. Fetch
-    // complete pinned record pages before grouping so a Compose project can
-    // never be split between pages.
+    // Filter status/source/port/time before grouping and paginate afterwards.
+    // Search is applied per-child, plus to verified Compose parent names:
+    // matching a parent includes its remaining *filtered pinned* children.
     const services = [];
     for (let start = 0; ; start += 100) {
-      const batch = listServices({ ...filters, pinnedOnly: true,
+      const batch = listServices({ ...baseFilters, pinnedOnly: true,
         limit: 100, offset: start });
       services.push(...batch.items);
       if (services.length >= batch.total || batch.items.length === 0) break;
     }
-    const groups = groupPinnedServices(
-      services, pinnedEndpoints.all(serverId), pinnedProvenance.all(serverId)
+    const endpoints = pinnedEndpoints.all(serverId);
+    const provenance = pinnedProvenance.all(serverId);
+    const rawGroups = groupPinnedServices(services, endpoints, provenance);
+    const groupNames = appearance.groupAppearances(
+      rawGroups.filter(group => group.kind === 'compose').map(group => group.id)
     );
+    const decorate = group => {
+      if (group.kind !== 'compose') return group;
+      const override = groupNames.get(group.id);
+      return {
+        ...group,
+        name: override?.name ?? group.detectedName,
+        customName: override?.name ?? null,
+        appearanceRevision: override?.revision ?? 0,
+        appearanceUpdatedAt: override?.updated_at ?? null,
+      };
+    };
+    const unfiltered = rawGroups.map(decorate);
+    let matches = services;
+    if (search) {
+      const term = search.toLocaleLowerCase();
+      const includes = name => String(name || '').toLocaleLowerCase().includes(term);
+      const selected = new Set();
+      for (const group of unfiltered) {
+        const parentMatch = group.kind === 'compose' &&
+          (includes(group.name) || includes(group.detectedName));
+        for (const service of group.services) {
+          if (parentMatch || includes(service.displayName)) selected.add(service.id);
+        }
+      }
+      matches = services.filter(service => selected.has(service.id));
+    }
+    const groups = search
+      ? groupPinnedServices(matches, endpoints, provenance).map(decorate)
+      : unfiltered;
     return {
       items: groups.slice(offset, offset + limit), total: groups.length,
-      serviceTotal: services.length, limit, offset,
+      serviceTotal: matches.length, limit, offset,
     };
+  }
+
+  // Only present, pinned and verified Compose groups can be edited. This
+  // lookup intentionally does not expose Docker daemon fingerprints.
+  const verifiedGroups = db.prepare(
+    'SELECT s.server_id, p.daemon_fingerprint, p.compose_project, ' +
+    'p.identity_confidence FROM registry_services s ' +
+    'JOIN registry_docker_provenance p ON p.service_id = s.id ' +
+    "WHERE s.is_pinned = 1 AND s.source = 'docker' " +
+    "AND p.identity_confidence = 'verified'"
+  );
+  function setGroupAppearance(id, patch) {
+    if (typeof id !== 'string' || !/^compose:[a-f0-9]{32}$/.test(id)) {
+      throw new TypeError('Invalid verified Compose group ID');
+    }
+    const match = verifiedGroups.all().find(row => composeGroupId(row.server_id, row) === id);
+    if (!match) return null;
+    return { id, kind: 'compose',
+      ...appearance.saveGroupName(id, patch, match.compose_project) };
+  }
+
+  function setServiceAppearance(id, patch) {
+    const updated = appearance.saveServiceName(id, patch);
+    return updated ? getService(id) : null;
   }
 
   const updatePin = db.prepare(
@@ -352,6 +428,7 @@ function createServiceRegistry(db) {
       .run(id, id);
     db.prepare('DELETE FROM registry_process_runs WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_recovery_notes WHERE service_id = ?').run(id);
+    db.prepare('DELETE FROM registry_service_appearance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_docker_provenance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_linux_provenance WHERE service_id = ?').run(id);
     db.prepare('DELETE FROM registry_http_metadata WHERE service_id = ?').run(id);
@@ -457,6 +534,8 @@ function createServiceRegistry(db) {
     getService,
     listServices,
     listPinnedGroups,
+    setServiceAppearance,
+    setGroupAppearance,
     forgetService,
     setPinned,
     linkDockerProxies: sourceLinks.linkListening,
