@@ -117,6 +117,7 @@ export async function appearanceBrowserContracts(context, options) {
     await page.reload({ waitUntil: 'domcontentloaded' });
     await page.getByRole('button', { name: 'Home utility service group' }).waitFor();
     await page.getByRole('textbox', { name: 'Search pinned services' }).fill('Home utility');
+    await page.waitForTimeout(400);
     await page.getByRole('button', { name: 'Home utility service group' }).click();
     await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
     await nativeForm.getByRole('textbox', { name: 'Display name' }).fill('My native host');
