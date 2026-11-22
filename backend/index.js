@@ -21,6 +21,7 @@ const { registerServerRoutes } = require('./routes/servers');
 const { createServiceRegistry } = require('./lib/service-registry/registry');
 const { createRegistryScanner, readRegistryConfig } = require('./lib/service-registry/scanner');
 const { createHttpMetadataStore } = require('./lib/service-registry/http-store');
+const { createCustomIconStore } = require('./lib/service-registry/custom-icons');
 const { readHttpMetadataConfig } = require('./lib/service-registry/http-probe');
 const { readDiscoveryCapabilities } = require('./lib/service-registry/discovery-capabilities');
 const { createHttpMetadataWorker } = require('./lib/service-registry/http-worker');
@@ -489,6 +490,7 @@ let serviceRegistry = null;
 let registryScanner = null;
 let registryScanEnabled = false;
 let httpMetadataStore = null;
+let customIconStore = null;
 let linuxProvenanceStore = null;
 let dockerProvenanceStore = null;
 let recoveryNotesStore = null;
@@ -499,6 +501,7 @@ try {
   serviceRegistry = createServiceRegistry(db);
   serviceRegistry.markStale('local');
   httpMetadataStore = createHttpMetadataStore(db);
+  customIconStore = createCustomIconStore(db);
   const registryConfig = readRegistryConfig();
   const recoveryConfig = readRecoveryConfig();
   if (recoveryConfig.requiresAuth) {
@@ -594,6 +597,7 @@ app.use('/api/settings', requireAuth, settingsRoutes);
 if (serviceRegistry) {
   app.use('/api/service-registry', createRegistryRouter(serviceRegistry, {
     scanEnabled: registryScanEnabled, scanner: registryScanner, httpStore: httpMetadataStore,
+    customIconStore,
     provenanceStore: linuxProvenanceStore,
     dockerProvenanceStore,
     recoveryNotesStore,
