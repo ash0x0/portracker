@@ -1,7 +1,7 @@
 'use strict';
 
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const { requireAuth, requireAllowedOrigin } = require('../middleware/auth');
 const { buildRecoveryRecipes } = require('../lib/service-registry/recovery-recipes');
 
 function createRegistryRouter(registry, {
@@ -62,6 +62,40 @@ function createRegistryRouter(registry, {
     } catch (error) {
       if (error instanceof TypeError) return res.status(400).json({ error: error.message });
       return res.status(500).json({ error: 'Unable to list pinned service groups' });
+    }
+  });
+
+  // User-authored presentation names require an authenticated session even
+  // on installations that expose read-only history without auth enabled.
+  router.patch('/pinned-groups/:groupId/appearance', requireAllowedOrigin, requireAuth, (req, res) => {
+    if (process.env.ENABLE_AUTH !== 'true') {
+      return res.status(403).json({ error: 'Appearance edits require authentication' });
+    }
+    try {
+      const group = registry.setGroupAppearance(req.params.groupId, req.body);
+      if (!group) return res.status(404).json({ error: 'Verified Compose group not found' });
+      res.set('Cache-Control', 'no-store');
+      return res.json(group);
+    } catch (error) {
+      if (error.code === 'appearance_conflict') return res.status(409).json({ error: error.message });
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to save group appearance' });
+    }
+  });
+
+  router.patch('/:id/appearance', requireAllowedOrigin, requireAuth, (req, res) => {
+    if (process.env.ENABLE_AUTH !== 'true') {
+      return res.status(403).json({ error: 'Appearance edits require authentication' });
+    }
+    try {
+      const service = registry.setServiceAppearance(req.params.id, req.body);
+      if (!service) return res.status(404).json({ error: 'Saved service not found' });
+      res.set('Cache-Control', 'no-store');
+      return res.json(service);
+    } catch (error) {
+      if (error.code === 'appearance_conflict') return res.status(409).json({ error: error.message });
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to save service appearance' });
     }
   });
 
