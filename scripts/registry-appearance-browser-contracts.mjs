@@ -34,6 +34,25 @@ async function singleServiceAppearanceContracts(page, records) {
   await page.getByRole('button', { name: 'My native host service group' }).waitFor();
 }
 
+async function conflictAppearanceContracts(page, serviceForm, records) {
+  await page.getByRole('button', { name: 'Edit selected service' }).click();
+  const conflictRoute = '**/api/service-registry/history-fixture-78/appearance';
+  await page.route(conflictRoute, route => route.fulfill({
+    status: 409, contentType: 'application/json',
+    body: JSON.stringify({ error: 'Concurrent appearance change' }),
+  }));
+  await serviceForm.getByRole('textbox', { name: 'Display name' }).fill('Keep this draft');
+  await serviceForm.getByRole('button', { name: 'Save appearance' }).click();
+  await serviceForm.getByRole('alert').getByText(/Appearance changed/).waitFor();
+  assert.equal(await serviceForm.getByRole('textbox', { name: 'Display name' }).inputValue(),
+    'Keep this draft');
+  await page.unroute(conflictRoute);
+  records[78].appearance.revision += 1;
+  records[78].appearanceRevision = records[78].appearance.revision;
+  await serviceForm.getByRole('button', { name: 'Reload latest and discard draft' }).click();
+  await serviceForm.waitFor({ state: 'hidden' });
+}
+
 export async function appearanceBrowserContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   for (const index of [78, 81, 95]) {
@@ -82,22 +101,7 @@ export async function appearanceBrowserContracts(context, options) {
     assert.equal(records[78].appearance.icon.name, 'editor');
     assert.equal(await page.getByRole('button', { name: 'Personal infrastructure service group' }).count(), 1);
 
-    await page.getByRole('button', { name: 'Edit selected service' }).click();
-    const conflictRoute = '**/api/service-registry/history-fixture-78/appearance';
-    await page.route(conflictRoute, route => route.fulfill({
-      status: 409, contentType: 'application/json',
-      body: JSON.stringify({ error: 'Concurrent appearance change' }),
-    }));
-    await serviceForm.getByRole('textbox', { name: 'Display name' }).fill('Keep this draft');
-    await serviceForm.getByRole('button', { name: 'Save appearance' }).click();
-    await serviceForm.getByRole('alert').getByText(/Appearance changed/).waitFor();
-    assert.equal(await serviceForm.getByRole('textbox', { name: 'Display name' }).inputValue(),
-      'Keep this draft');
-    await page.unroute(conflictRoute);
-    records[78].appearance.revision += 1;
-    records[78].appearanceRevision = records[78].appearance.revision;
-    await serviceForm.getByRole('button', { name: 'Reload latest and discard draft' }).click();
-    await serviceForm.waitFor({ state: 'hidden' });
+    await conflictAppearanceContracts(page, serviceForm, records);
 
     await page.getByRole('button', { name: 'Edit selected service' }).click();
     await serviceForm.getByLabel('Upload custom appearance icon').setInputFiles({
