@@ -1,5 +1,5 @@
 import React, { useEffect, useId, useState } from "react";
-import { Code2, Container, Database, Globe2, HardDrive, ImagePlus, Monitor, Network, RotateCcw, Server, Settings, Shield, TerminalSquare } from "lucide-react";
+import { Code2, Container, Database, Globe, HardDrive, ImagePlus, Monitor, Network, RotateCcw, Server, Settings, ShieldCheck, TerminalSquare } from "lucide-react";
 import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { uploadRegistryCustomIcon } from "../../lib/api/serviceRegistry";
 
@@ -9,12 +9,12 @@ const BUILTINS = [
   { name: "terminal", label: "Terminal", Icon: TerminalSquare },
   { name: "container", label: "Container", Icon: Container },
   { name: "server", label: "Server", Icon: Server },
-  { name: "globe", label: "Web", Icon: Globe2 },
+  { name: "globe", label: "Web", Icon: Globe },
   { name: "database", label: "Database", Icon: Database },
   { name: "code", label: "Code", Icon: Code2 },
   { name: "monitor", label: "Monitor", Icon: Monitor },
   { name: "network", label: "Network", Icon: Network },
-  { name: "shield", label: "Security", Icon: Shield },
+  { name: "shield", label: "Security", Icon: ShieldCheck },
   { name: "settings", label: "Settings", Icon: Settings },
   { name: "hard-drive", label: "Storage", Icon: HardDrive },
 ];
@@ -74,14 +74,25 @@ export function RegistryAppearanceEditor({ item, scope, onSave, onCancel, onRelo
       return;
     }
     if (!["image/png", "image/jpeg", "image/webp", "image/x-icon",
-      "image/vnd.microsoft.icon"].includes(candidate.type)) {
+      "image/vnd.microsoft.icon"].includes(candidate.type) &&
+      !(candidate.type === "" && /\.ico$/i.test(candidate.name))) {
       setError("Choose a PNG, JPEG, WebP, or ICO image.");
       return;
     }
-    setFile(candidate);
+    setFile(candidate.type === "" && /\.ico$/i.test(candidate.name)
+      ? new File([candidate], candidate.name, { type: "image/x-icon" })
+      : candidate);
     setIcon({ type: "upload" });
     setIconChanged(true);
     setError("");
+  };
+
+  const reloadLatest = async () => {
+    setBusy(true);
+    setError("");
+    try { await onReload(); }
+    catch (failure) { setError(failure.message || "Unable to reload appearance."); }
+    finally { setBusy(false); }
   };
 
   const handleSave = async event => {
@@ -137,7 +148,7 @@ export function RegistryAppearanceEditor({ item, scope, onSave, onCancel, onRelo
       </div>
       <div className="space-y-2">
         <label htmlFor={formId + "-name"} className="block text-sm font-medium">Display name</label>
-        <input id={formId + "-name"} type="text" maxLength={80} className={FIELD}
+        <input id={formId + "-name"} type="text" maxLength={80} autoFocus className={FIELD}
           value={resetName ? detectedName : name} disabled={busy || resetName}
           onChange={event => { setName(event.target.value); setNameChanged(true); }} />
         <p className="text-xs text-slate-600 dark:text-slate-400">Detected name: {detectedName}</p>
@@ -156,7 +167,7 @@ export function RegistryAppearanceEditor({ item, scope, onSave, onCancel, onRelo
           {previewUrl
             ? <img alt="New selected image preview" src={previewUrl} width={32} height={32}
               className="h-8 w-8 object-contain" />
-            : <RegistryServiceIcon name={effectiveName} source={item.source ||
+            : <RegistryServiceIcon name={detectedName} source={item.source ||
                 (item.sources?.includes("docker") ? "docker" : "system")}
                 iconHash={item.iconHash} iconChoice={icon} size={32} />}
           <span>Preview</span>
@@ -200,7 +211,7 @@ export function RegistryAppearanceEditor({ item, scope, onSave, onCancel, onRelo
       </fieldset>
       {error && <div role="alert" className="space-y-2 text-sm text-red-700 dark:text-red-300">
         <p>{error}</p>
-        {conflict && <button type="button" className={BUTTON} disabled={busy} onClick={onReload}>
+        {conflict && <button type="button" className={BUTTON} disabled={busy} onClick={reloadLatest}>
           Reload latest and discard draft
         </button>}
       </div>}

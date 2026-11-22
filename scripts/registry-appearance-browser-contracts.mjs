@@ -8,7 +8,7 @@ const PNG = Buffer.from(
 
 export async function appearanceBrowserContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
-  for (const index of [78, 81]) {
+  for (const index of [78, 81, 95]) {
     records[index].pinned = true;
     records[index].pinnedAt = records[index].lastSeenAt;
   }
@@ -66,6 +66,8 @@ export async function appearanceBrowserContracts(context, options) {
     assert.equal(await serviceForm.getByRole('textbox', { name: 'Display name' }).inputValue(),
       'Keep this draft');
     await page.unroute(conflictRoute);
+    records[78].appearance.revision += 1;
+    records[78].appearanceRevision = records[78].appearance.revision;
     await serviceForm.getByRole('button', { name: 'Reload latest and discard draft' }).click();
     await serviceForm.waitFor({ state: 'hidden' });
 
@@ -100,6 +102,20 @@ export async function appearanceBrowserContracts(context, options) {
     await projectForm.getByRole('textbox', { name: 'Display name' }).press('Escape');
     await projectForm.waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: 'Personal infrastructure service group' }).count(), 1);
+    const nativeGroup = page.getByRole('button', { name: 'example-service-95 service group' });
+    await nativeGroup.click();
+    await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
+    const nativeForm = page.getByRole('form', { name: 'Edit service appearance' });
+    const nativeName = nativeForm.getByRole('textbox', { name: 'Display name' });
+    assert.equal(await nativeName.evaluate(el => document.activeElement === el), true);
+    await nativeName.fill('Home utility');
+    await nativeForm.getByRole('radio', { name: 'Database' }).check();
+    await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
+    await nativeForm.waitFor({ state: 'hidden' });
+    assert.equal(records[95].displayName, 'Home utility');
+    assert.equal(records[95].appearance.icon.name, 'database');
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.getByRole('button', { name: 'Home utility service group' }).waitFor();
   } finally {
     await page.evaluate(() => localStorage.setItem('portrackerActiveView', 'live'))
       .catch(() => undefined);

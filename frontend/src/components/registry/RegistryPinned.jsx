@@ -73,6 +73,7 @@ export function RegistryPinned({ onBrowseHistory }) {
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
   const [editor, setEditor] = useState(null);
   const editorRef = useRef(null);
+  const editorTrigger = useRef(null);
   const [appearanceMessage, setAppearanceMessage] = useState("");
   const root = useRef(null);
   const savedScroll = useRef(null);
@@ -146,14 +147,24 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = null;
   }, [data, page, selectedId]);
 
+  const restoreEditorFocus = () => {
+    const trigger = editorTrigger.current;
+    editorTrigger.current = null;
+    requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
+  };
+
   const closeEditor = () => {
     editorRef.current = null;
     setEditor(null);
+    restoreEditorFocus();
     refresh();
   };
 
   const openEditor = (scope, item, groupId) => {
     const target = { scope, id: item.id, groupId, item };
+    editorTrigger.current = document.activeElement;
     editorRef.current = target;
     setEditor(target);
     setAppearanceMessage("");
@@ -221,6 +232,7 @@ export function RegistryPinned({ onBrowseHistory }) {
       if (target.scope === "service") setDetail(previous => updated(previous));
       editorRef.current = null;
       setEditor(null);
+      restoreEditorFocus();
       setAppearanceMessage("Appearance saved. If the edited item disappears, " +
         "it may no longer match the current search or filters; clear filters to find it.");
       refresh();
@@ -228,6 +240,24 @@ export function RegistryPinned({ onBrowseHistory }) {
       savedScroll.current = null;
       throw failure;
     }
+  };
+
+  const reloadAppearance = async () => {
+    const target = editorRef.current;
+    if (target?.scope === "service") {
+      const latest = await getRegistryService(target.id);
+      setDetail(latest);
+      setData(previous => ({
+        ...previous,
+        items: previous.items.map(group => {
+          if (!group.services.some(item => item.id === target.id)) return group;
+          const services = group.services.map(item =>
+            item.id === target.id ? { ...item, ...latest } : item);
+          return { ...group, services };
+        }),
+      }));
+    }
+    closeEditor();
   };
 
   const toggleGroup = group => {
@@ -433,7 +463,7 @@ export function RegistryPinned({ onBrowseHistory }) {
                 onEditGroup={editGroup} onEditService={editService}
                 editor={editor?.groupId === group.id ? editor : null}
                 onSaveAppearance={saveAppearance} onCancelAppearance={closeEditor}
-                onReloadAppearance={closeEditor}
+                onReloadAppearance={reloadAppearance}
                 pinBusy={pinBusy} forgetting={forgetting}
               />
             ))}
