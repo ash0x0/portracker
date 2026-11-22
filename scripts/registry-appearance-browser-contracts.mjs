@@ -6,6 +6,34 @@ const PNG = Buffer.from(
   'base64'
 );
 
+async function singleServiceAppearanceContracts(page, records) {
+  const nativeGroup = page.getByRole('button', { name: 'example-service-95 service group' });
+  await nativeGroup.click();
+  await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
+  const nativeForm = page.getByRole('form', { name: 'Edit service appearance' });
+  const nativeName = nativeForm.getByRole('textbox', { name: 'Display name' });
+  assert.equal(await nativeName.evaluate(el => document.activeElement === el), true);
+  await nativeName.fill('Home utility');
+  await nativeForm.getByRole('radio', { name: 'Database' }).check();
+  await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
+  await nativeForm.waitFor({ state: 'hidden' });
+  assert.equal(records[95].displayName, 'Home utility');
+  assert.equal(records[95].appearance.icon.name, 'database');
+  await page.reload({ waitUntil: 'domcontentloaded' });
+  await page.getByRole('button', { name: 'Home utility service group' }).waitFor();
+  await page.getByRole('textbox', { name: 'Search pinned services' }).fill('Home utility');
+  await page.waitForTimeout(400);
+  await page.getByRole('button', { name: 'Home utility service group' }).click();
+  await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
+  await nativeForm.getByRole('textbox', { name: 'Display name' }).fill('My native host');
+  await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
+  await nativeForm.waitFor({ state: 'hidden' });
+  await page.getByRole('button', { name: 'Reload list', exact: true }).click();
+  await page.getByRole('button', { name: 'My native host service group' }).waitFor();
+  await page.getByRole('button', { name: 'Clear name filter' }).click();
+  await page.getByRole('button', { name: 'My native host service group' }).waitFor();
+}
+
 export async function appearanceBrowserContracts(context, options) {
   const { records, urlPattern, handleRegistryRequest } = createRegistryHistoryFixture();
   for (const index of [78, 81, 95]) {
@@ -102,31 +130,7 @@ export async function appearanceBrowserContracts(context, options) {
     await projectForm.getByRole('textbox', { name: 'Display name' }).press('Escape');
     await projectForm.waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: 'Personal infrastructure service group' }).count(), 1);
-    const nativeGroup = page.getByRole('button', { name: 'example-service-95 service group' });
-    await nativeGroup.click();
-    await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
-    const nativeForm = page.getByRole('form', { name: 'Edit service appearance' });
-    const nativeName = nativeForm.getByRole('textbox', { name: 'Display name' });
-    assert.equal(await nativeName.evaluate(el => document.activeElement === el), true);
-    await nativeName.fill('Home utility');
-    await nativeForm.getByRole('radio', { name: 'Database' }).check();
-    await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
-    await nativeForm.waitFor({ state: 'hidden' });
-    assert.equal(records[95].displayName, 'Home utility');
-    assert.equal(records[95].appearance.icon.name, 'database');
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    await page.getByRole('button', { name: 'Home utility service group' }).waitFor();
-    await page.getByRole('textbox', { name: 'Search pinned services' }).fill('Home utility');
-    await page.waitForTimeout(400);
-    await page.getByRole('button', { name: 'Home utility service group' }).click();
-    await page.getByRole('button', { name: 'Edit appearance', exact: true }).click();
-    await nativeForm.getByRole('textbox', { name: 'Display name' }).fill('My native host');
-    await nativeForm.getByRole('button', { name: 'Save appearance' }).click();
-    await nativeForm.waitFor({ state: 'hidden' });
-    await page.getByRole('button', { name: 'Reload list', exact: true }).click();
-    await page.getByRole('button', { name: 'My native host service group' }).waitFor();
-    await page.getByRole('button', { name: 'Clear name filter' }).click();
-    await page.getByRole('button', { name: 'My native host service group' }).waitFor();
+    await singleServiceAppearanceContracts(page, records);
   } finally {
     await page.evaluate(() => localStorage.setItem('portrackerActiveView', 'live'))
       .catch(() => undefined);
