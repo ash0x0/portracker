@@ -244,6 +244,19 @@ function migrateRegistrySchema(db) {
     ].join('\n'));
     db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
       .run(11, Date.now());
+    // Additive v12: icon overrides share the #76 appearance revisions. User
+    // uploads are isolated from the automatically refreshed favicon cache.
+    for (const table of ['registry_service_appearance', 'registry_group_appearance']) {
+      const columns = db.prepare('PRAGMA table_info(' + table + ')').all();
+      if (!columns.some(column => column.name === 'icon_choice')) {
+        db.exec('ALTER TABLE ' + table + ' ADD COLUMN icon_choice TEXT ' +
+          'CHECK (icon_choice IS NULL OR length(icon_choice) <= 80)');
+      }
+    }
+    db.exec('CREATE TABLE IF NOT EXISTS registry_custom_icons (' +
+      'hash TEXT PRIMARY KEY, mime TEXT NOT NULL, bytes BLOB NOT NULL, created_at INTEGER NOT NULL)');
+    db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
+      .run(12, Date.now());
   });
   migrate();
 }

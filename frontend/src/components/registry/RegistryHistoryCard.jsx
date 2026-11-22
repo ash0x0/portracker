@@ -28,7 +28,7 @@ export function RegistryHistoryCard({
           aria-label={service.displayName + " service details"}
           className="flex w-full min-w-0 items-center gap-3 text-left lg:w-auto lg:flex-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
           <ServiceListChevron expanded={expanded} />
-          <RegistryServiceIcon iconHash={service.iconHash} name={service.displayName}
+          <RegistryServiceIcon iconHash={service.iconHash} iconChoice={service.iconChoice} name={service.displayName}
             source={isDocker ? "docker" : "system"} />
           <SavedServiceStatusDot status={service.status} />
           <span className="min-w-0 flex-1 space-y-1">

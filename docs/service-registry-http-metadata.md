@@ -144,3 +144,48 @@ same-origin redirects, external-icon blocking, malicious redirects, MIME
 confusion, oversized responses and real TCP behavior; SQLite persistence,
 failure retries and favicon caching are covered by Jest and full native
 AMD64/ARM64 GitHub Actions.
+
+## User-selected icons (fork issue #77)
+
+Pinned/History services and verified Compose parent rows can have an explicitly
+chosen icon without changing the scanner or automatic HTTP favicon metadata.
+This extends the same revisioned appearance contract used for custom names:
+
+- `PATCH /api/service-registry/:id/appearance` with
+  `{"icon":{"type":"glyph","name":"terminal"},"revision":N}` or
+  `{"icon":{"type":"upload","hash":"<64 lowercase hex chars>"},"revision":N}`.
+- `PATCH /api/service-registry/pinned-groups/:groupId/appearance` uses
+  the same shape for the verified Compose parent only. Child choices remain
+  independent. Use `{"icon":"automatic","revision":N}` to restore discovered
+  favicon/fallback. Omitting `icon` preserves it during a name-only edit;
+  omitting `name` preserves it during an icon-only edit.
+- `POST /api/service-registry/custom-icons` sends a **raw** binary body
+  (`Content-Type: image/png`, `image/jpeg`, `image/webp` or `image/x-icon`,
+  also accepting `image/vnd.microsoft.icon`). Returns
+  `{"hash":"<sha256>","mime":"image/png"}`. No multipart filenames,
+  remote URL fetching, file paths or base64 list payloads.
+- `GET /api/service-registry/custom-icons/:hash` serves only validated,
+  stored raster bytes with `nosniff`, same-origin CORP, `default-src 'none'`
+  CSP and private caching. Uploads/appearance mutations require a signed-in
+  session with `ENABLE_AUTH=true`; read protection matches cached favicons.
+
+The server validates MIME against raster structure, enforces **128 KiB per file**
+and bounded dimensions, rejects SVG/HTML, corrupt/truncated structures and
+supported EXIF/text metadata, and restricts glyphs to the server's curated
+allowlist. The separate `registry_custom_icons` table is SHA-256 deduplicated,
+limited to **64 distinct images / 4 MiB total**. Full uploads return HTTP 507;
+invalid payloads return 400/413. Unreferenced uploads expire after one hour
+on a later upload. Reset/Forget reclaims an icon once its **final** service
+or Compose reference is gone; dormant verified group overrides retain their
+references. The SQLite file should be backed up as a single unit.
+
+Effective icon priority: **uploaded choice → selected local glyph → discovered
+favicon → safe automatic fallback**. Automatic favicon refresh and eviction
+never overwrite or delete user-selected bytes. Settings follow durable registry
+service IDs or daemon-fingerprinted, verified Compose group IDs—not ports, PIDs
+or unrelated apps restarting on the same socket.
+
+The uploader checks format structure, not whether an image is visually safe
+for every conceivable decoder. Images are never executed as HTML/SVG and are
+subject to the browser's image decoder. Keep a current browser and do not
+upload sensitive photographs or screenshots.

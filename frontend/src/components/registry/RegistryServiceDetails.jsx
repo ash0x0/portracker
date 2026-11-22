@@ -55,7 +55,7 @@ export function RegistryServiceDetails({
         <>
           <RegistryDetailSection title="Overview">
               <div className="flex flex-wrap gap-2 items-center">
-                <RegistryServiceIcon iconHash={detail.iconHash} name={detail.displayName}
+                <RegistryServiceIcon iconHash={detail.iconHash} iconChoice={detail.iconChoice} name={detail.displayName}
                   source={detail.source === "docker" ? "docker" : "system"} size={28} />
                 <strong>{detail.displayName}</strong>
                 <StatusBadge status={detail.status} />
