@@ -7,6 +7,7 @@ import {
 import {
   forgetRegistryService, getRegistryPinnedGroups, getRegistryScanStatus,
   getRegistryService, scanRegistryNow, setRegistryServicePinned,
+  saveRegistryServiceAppearance, saveRegistryComposeAppearance,
 } from "../../lib/api/serviceRegistry";
 import { PAGE_SIZE, parseRegistryPortPrefix, registryPageCount } from "../../lib/registry-utils.mjs";
 import { RegistryPinnedGroup } from "./RegistryPinnedGroup";
@@ -70,6 +71,11 @@ export function RegistryPinned({ onBrowseHistory }) {
   const [pinError, setPinError] = useState("");
   const [forgetting, setForgetting] = useState(false);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
+  const [editor, setEditor] = useState(null);
+  const editorRef = useRef(null);
+  const editorTrigger = useRef(null);
+  const [appearanceMessage, setAppearanceMessage] = useState("");
+  const [retainedGroup, setRetainedGroup] = useState(null);
   const root = useRef(null);
   const savedScroll = useRef(null);
 
@@ -85,6 +91,7 @@ export function RegistryPinned({ onBrowseHistory }) {
     return () => clearInterval(timer);
   }, []);
   const refresh = useCallback(() => setVersion(value => value + 1), []);
+  useEffect(() => setRetainedGroup(null), [search, portText, status, source, lastSeenWindow, page]);
   const portPrefix = parseRegistryPortPrefix(portText);
   const invalidPort = Boolean(portText.trim()) && portPrefix === null;
 
@@ -101,7 +108,9 @@ export function RegistryPinned({ onBrowseHistory }) {
     }, controller.signal).then(result => {
       if (controller.signal.aborted) return;
       loaded.current = true;
-      setData(result);
+      // Keep the currently expanded row and its draft mounted during polling.
+      // Refresh the list once Save/Cancel closes the editor.
+      if (!editorRef.current) setData(result);
       setLoading(false);
     }).catch(failure => {
       if (controller.signal.aborted) return;
@@ -140,7 +149,125 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = null;
   }, [data, page, selectedId]);
 
+  const restoreEditorFocus = () => {
+    const trigger = editorTrigger.current;
+    editorTrigger.current = null;
+    requestAnimationFrame(() => {
+      if (trigger?.isConnected) trigger.focus();
+    });
+  };
+
+  const closeEditor = () => {
+    editorRef.current = null;
+    setEditor(null);
+    restoreEditorFocus();
+    refresh();
+  };
+
+  const openEditor = (scope, item, groupId) => {
+    const target = { scope, id: item.id, groupId, item };
+    editorTrigger.current = document.activeElement;
+    editorRef.current = target;
+    setEditor(target);
+    setAppearanceMessage("");
+  };
+
+  const editGroup = group => {
+    if (group.kind === "compose") openEditor("compose", group, group.id);
+    else if (group.services[0]) openEditor("service", group.services[0], group.id);
+  };
+
+  const editService = service => {
+    const group = data.items.find(item =>
+      item.services.some(member => member.id === service.id));
+    if (group) openEditor("service", group.services.find(member => member.id === service.id) || service, group.id);
+  };
+
+  const saveAppearance = async patch => {
+    const target = editorRef.current;
+    if (!target) return;
+    savedScroll.current = scrollSnapshot(root.current);
+    try {
+      const saved = target.scope === "compose"
+        ? await saveRegistryComposeAppearance(target.id, patch)
+        : await saveRegistryServiceAppearance(target.id, patch);
+      const updated = current => {
+        if (!current || current.id !== target.id) return current;
+        const name = Object.hasOwn(patch, "name")
+          ? (patch.name === null
+            ? (saved?.detectedName || current.detectedName ||
+              current.appearance?.detectedName || current.displayName || current.name)
+            : patch.name)
+          : (current.displayName || current.name);
+        const iconChoice = patch.icon === "automatic"
+          ? { type: "automatic" } : patch.icon;
+        const appearance = {
+          ...current.appearance,
+          ...(Object.hasOwn(patch, "name") ? { name: patch.name } : {}),
+          ...(Object.hasOwn(patch, "icon") ? { icon: iconChoice } : {}),
+          revision: saved?.appearanceRevision ?? patch.revision + 1,
+        };
+        return {
+          ...current, appearance,
+          appearanceRevision: saved?.appearanceRevision ?? patch.revision + 1,
+          ...(Object.hasOwn(patch, "name")
+            ? (target.scope === "compose" ? { name, customName: patch.name } : { displayName: name, customName: patch.name }) : {}),
+          ...(Object.hasOwn(patch, "icon") ? { iconChoice } : {}),
+        };
+      };
+      const updateGroup = group => {
+        if (target.scope === "compose") return updated(group);
+        if (!group.services.some(service => service.id === target.id)) return group;
+        const services = group.services.map(updated);
+        return {
+          ...group, services,
+          ...(group.kind === "service" ? {
+            name: services[0].displayName,
+            customName: services[0].customName,
+            appearanceRevision: services[0].appearanceRevision,
+            iconChoice: services[0].iconChoice,
+          } : {}),
+        };
+      };
+      setData(previous => ({ ...previous, items: previous.items.map(updateGroup) }));
+      const before = data.items.find(group => group.id === target.groupId);
+      const noLongerMatches = Object.hasOwn(patch, "name") && search &&
+        !String(patch.name || saved?.detectedName || "").toLocaleLowerCase()
+          .includes(search.toLocaleLowerCase());
+      setRetainedGroup(noLongerMatches && before
+        ? { id: before.id, group: updateGroup(before) } : null);
+      if (target.scope === "service") setDetail(previous => updated(previous));
+      editorRef.current = null;
+      setEditor(null);
+      restoreEditorFocus();
+      setAppearanceMessage("Appearance saved.");
+      refresh();
+    } catch (failure) {
+      savedScroll.current = null;
+      throw failure;
+    }
+  };
+
+  const reloadAppearance = async () => {
+    const target = editorRef.current;
+    if (target?.scope === "service") {
+      const latest = await getRegistryService(target.id);
+      setDetail(latest);
+      setData(previous => ({
+        ...previous,
+        items: previous.items.map(group => {
+          if (!group.services.some(item => item.id === target.id)) return group;
+          const services = group.services.map(item =>
+            item.id === target.id ? { ...item, ...latest } : item);
+          return { ...group, services };
+        }),
+      }));
+    }
+    closeEditor();
+  };
+
   const toggleGroup = group => {
+    if (editorRef.current) closeEditor();
     if (expandedGroupId === group.id) {
       setExpandedGroupId(null);
       setSelectedId(null);
@@ -158,6 +285,7 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = scrollSnapshot(root.current);
     try {
       await setRegistryServicePinned(service.id, false);
+      setRetainedGroup(null);
       const group = data.items.find(item =>
         item.services.some(member => member.id === service.id));
       const next = group?.services.find(member => member.id !== service.id);
@@ -186,6 +314,7 @@ export function RegistryPinned({ onBrowseHistory }) {
     savedScroll.current = scrollSnapshot(root.current);
     try {
       await forgetRegistryService(selectedId);
+      setRetainedGroup(null);
       const group = data.items.find(item =>
         item.services.some(member => member.id === selectedId));
       const next = group?.services.find(member => member.id !== selectedId);
@@ -224,6 +353,9 @@ export function RegistryPinned({ onBrowseHistory }) {
   };
 
   const pages = registryPageCount(data.total);
+  const visibleItems = retainedGroup
+    ? [retainedGroup.group, ...data.items.filter(group => group.id !== retainedGroup.id)]
+    : data.items;
   return (
     <section ref={root} aria-label="Pinned service groups" className="space-y-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -252,6 +384,22 @@ export function RegistryPinned({ onBrowseHistory }) {
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scan && !scan.enabled && <p className="text-sm text-amber-600">Discovery is disabled. Saved pins remain accessible.</p>}
       {pinError && <p role="alert" className="text-sm text-red-600">{pinError}</p>}
+      {appearanceMessage && (
+        <p role="status" className="text-sm text-indigo-700 dark:text-indigo-300">
+          {appearanceMessage}
+          {retainedGroup && (
+            <>
+              {" "}The renamed item stays visible outside the current name filter
+              until you change filters or page.
+              <button type="button" className="ml-2 underline focus-visible:outline-2"
+                onClick={() => { setQuery(""); setSearch(""); setPage(0);
+                  setRetainedGroup(null); refresh(); }}>
+                Clear name filter
+              </button>
+            </>
+          )}
+        </p>
+      )}
       <div aria-label="Pinned filters" className="grid grid-cols-1 gap-3 sm:grid-cols-3 lg:grid-cols-5">
         <label className="space-y-1 text-sm">
           <span>Name</span>
@@ -304,7 +452,7 @@ export function RegistryPinned({ onBrowseHistory }) {
       {invalidPort && <p role="alert" className="text-sm text-red-600">Enter a numeric port prefix (1–65535).</p>}
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {loading && <p role="status" className="text-sm text-slate-500">Loading pinned services…</p>}
-      {!loading && !error && !invalidPort && data.items.length === 0 && (
+      {!loading && !error && !invalidPort && visibleItems.length === 0 && (
         <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-700 p-10 text-center text-slate-600 dark:text-slate-400">
           No pinned services match these filters. Pin a service from History or adjust your filters.
           <button type="button" onClick={onBrowseHistory}
@@ -313,7 +461,7 @@ export function RegistryPinned({ onBrowseHistory }) {
           </button>
         </div>
       )}
-      {!invalidPort && data.items.length > 0 && (
+      {!invalidPort && visibleItems.length > 0 && (
         <div data-pinned-service-list className="space-y-3">
           <div className="flex flex-wrap items-center justify-between gap-2 px-1">
             <h2 className="text-sm font-semibold text-slate-800 dark:text-slate-100">
@@ -322,14 +470,18 @@ export function RegistryPinned({ onBrowseHistory }) {
             <span className="text-xs text-slate-500">{data.serviceTotal} pinned records</span>
           </div>
           <div className="space-y-3">
-            {data.items.map(group => (
+            {visibleItems.map(group => (
               <RegistryPinnedGroup key={group.id} group={group}
                 expanded={expandedGroupId === group.id} selectedId={selectedId}
                 detail={detail} detailError={detailError}
                 onToggle={toggleGroup} onSelect={setSelectedId}
                 onPinToggle={handleUnpin}
                 onForget={() => setForgetDialogOpen(true)}
-                onClose={() => { setExpandedGroupId(null); setSelectedId(null); }}
+                onClose={() => { setExpandedGroupId(null); setSelectedId(null); closeEditor(); }}
+                onEditGroup={editGroup} onEditService={editService}
+                editor={editor?.groupId === group.id ? editor : null}
+                onSaveAppearance={saveAppearance} onCancelAppearance={closeEditor}
+                onReloadAppearance={reloadAppearance}
                 pinBusy={pinBusy} forgetting={forgetting}
               />
             ))}

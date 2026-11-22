@@ -11,6 +11,7 @@ import { phaseCContracts } from './phase-c-browser-contracts.mjs';
 import { historyHeaderContracts } from './phase-b-browser-contracts.mjs';
 import { assertFlatRegistryDetails } from './phase-3-browser-contracts.mjs';
 import { assertRegistryReloadBehavior } from './registry-reload-browser-contracts.mjs';
+import { appearanceBrowserContracts } from './registry-appearance-browser-contracts.mjs';
 
 async function assertLayout(page) {
   const dimensions = await page.evaluate(() => ({ width: window.innerWidth, content: document.documentElement.scrollWidth }));
@@ -223,13 +224,11 @@ async function recoveryCommandFlow(page) {
     assert.equal(await page.evaluate(() => window.__registryCopiedCommand),
       (await commandText.textContent()).trim(),
       'Copy must match the exact displayed read-only command');
-
     await page.getByRole('button', { name: 'Edit command' }).click();
     await commandField.fill('this should not be saved');
     await page.getByRole('button', { name: 'Cancel' }).click();
     assert.equal(await commandField.count(), 0, 'Cancel restores plain text');
     assert.equal((await commandText.textContent()).trim(), updatedCommand);
-
     const errorRoute = '**/api/service-registry/history-fixture-78/recovery-start';
     await page.route(errorRoute, route => route.fulfill({
       status: 409, contentType: 'application/json',
@@ -352,6 +351,7 @@ async function viewportContract(browser, options) {
     await registryHistoryNavigation(page, options);
     await phaseAContracts(context, options);
     await phaseCContracts(context, options);
+    await appearanceBrowserContracts(context, options);
     await releaseNotice(page, options.noticePlan.freshVersion);
     await settings(page);
     await peerWarning(page, options);
@@ -381,7 +381,6 @@ async function viewportContract(browser, options) {
     await context.close();
   }
 }
-
 export async function browserContracts(baseUrl, credentials, version) {
   const changelog = fs.readFileSync(new URL('../CHANGELOG.md', import.meta.url), 'utf8');
   const generator = fileURLToPath(new URL('./generate-release-notes.mjs', import.meta.url));

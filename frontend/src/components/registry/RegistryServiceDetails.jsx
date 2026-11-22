@@ -1,5 +1,5 @@
 import React from "react";
-import { Trash2, X } from "lucide-react";
+import { Pencil, Trash2, X } from "lucide-react";
 import { RegistryPinButton } from "./RegistryPinButton";
 import { RegistryRecoveryDetails } from "./RegistryRecoveryDetails";
 import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
@@ -26,7 +26,7 @@ export function StatusBadge({ status }) {
 
 export function RegistryServiceDetails({
   detail, detailError, onPinToggle, onClose, onForget, pinBusy, forgetting,
-  showActions = true,
+  showActions = true, onEditAppearance = null, editLabel = "Edit selected service",
 }) {
   return (
     <section aria-label="Saved service details"
@@ -41,6 +41,11 @@ export function RegistryServiceDetails({
                 className="inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm border border-red-300 text-red-700 dark:text-red-300 hover:bg-red-50 dark:hover:bg-red-950 disabled:opacity-50">
                 <Trash2 className="w-4 h-4" aria-hidden="true" /> Forget
               </button>
+              {onEditAppearance && <button type="button" onClick={() => onEditAppearance(detail)}
+                className={FIELD_CLASS + " inline-flex items-center gap-2"}
+                aria-label={editLabel}>
+                <Pencil className="h-4 w-4" aria-hidden="true" /> {editLabel}
+              </button>}
               <RegistryPinButton service={detail} onToggle={onPinToggle} busy={pinBusy}
                 ariaLabel={detail.pinned ? "Unpin selected service" : "Pin selected service"} />
             </>
@@ -55,7 +60,7 @@ export function RegistryServiceDetails({
         <>
           <RegistryDetailSection title="Overview">
               <div className="flex flex-wrap gap-2 items-center">
-                <RegistryServiceIcon iconHash={detail.iconHash} iconChoice={detail.iconChoice} name={detail.displayName}
+                <RegistryServiceIcon iconHash={detail.iconHash} iconChoice={detail.iconChoice} name={detail.detectedName || detail.displayName}
                   source={detail.source === "docker" ? "docker" : "system"} size={28} />
                 <strong>{detail.displayName}</strong>
                 <StatusBadge status={detail.status} />

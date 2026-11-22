@@ -8,7 +8,9 @@ async function request(url, options = {}) {
   });
   if (!response.ok) {
     const error = await response.json().catch(() => ({}));
-    throw new Error(error.error || `History request failed (HTTP ${response.status})`);
+    const failure = new Error(error.error || `History request failed (HTTP ${response.status})`);
+    failure.status = response.status;
+    throw failure;
   }
   if (response.status === 204) return null;
   return response.json();
@@ -69,5 +71,29 @@ export function saveRegistryRecoveryNotes(id, notes, version) {
     method: "PUT",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ notes, version }),
+  });
+}
+
+export function saveRegistryServiceAppearance(id, patch) {
+  return request(`${BASE}/${encodeURIComponent(id)}/appearance`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function saveRegistryComposeAppearance(groupId, patch) {
+  return request(`${BASE}/pinned-groups/${encodeURIComponent(groupId)}/appearance`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(patch),
+  });
+}
+
+export function uploadRegistryCustomIcon(file) {
+  return request(`${BASE}/custom-icons`, {
+    method: "POST",
+    headers: { "Content-Type": file.type || "application/octet-stream" },
+    body: file,
   });
 }

@@ -182,48 +182,59 @@ offer fast Pin/Unpin on the summary card.
 5. Verify mobile wrapping, page/filters and 30-second background refresh
    preserve the expanded selection and scroll position.
 
+## Pinned appearance customization (issue #78)
 
-## User-defined display names (schema v11, fork issue #76)
+Expand a Pinned row and choose **Edit appearance** for a single-service row,
+or **Edit project appearance** for a verified Compose project. A project edit
+changes only the visual parent, not any member service's identity, pin, recovery
+instructions, or override. For Compose children, choose **Edit selected service**
+in the child details toolbar; this remains available even when only one child
+is pinned.
 
-The underlying service `registry_services.display_name` remains auto-detected.
-An optional `registry_service_appearance.name` override is keyed **only** by
-the immutable saved service ID. History, Pinned, and detail reads expose
-`detectedName`, `customName` (null if automatic), `displayName` (effective),
-`appearanceRevision`, and `appearanceUpdatedAt`. Search uses effective names.
-An unpin does not clear the override; Forget deletes the annotation. Scanner
-reconciliation never writes it and port reuse alone never transfers it.
+The editor starts with the effective visible name. It displays the original
+automatically detected name for troubleshooting. Choose a built-in local icon,
+**Automatic** (the latest cached favicon or a safe fallback), or select a local
+PNG/JPEG/WebP/ICO image to upload. An uploaded icon is a user-provided image,
+not a verified website favicon. Images are restricted to 128 KiB and are
+validated again by the server. No user-supplied remote URLs are fetched.
 
-Verified Compose parent rows have separate `registry_group_appearance` entries,
-keyed by the server-generated `compose:<hash>` identity derived from server ID,
-Docker daemon fingerprint, and Compose project. The parent name is independent
-of member names, pins and recovery instructions. Unverified groupings cannot
-read or change a verified parent override. A parent-name search includes its
-eligible pinned children *after* status/source/port/seen-since filters; a
-child-name search filters the individual children before regrouping. Pagination
-continues to count groups after filtering.
+**Reset name** and **Reset icon** are independent draft changes, committed
+only when **Save appearance** succeeds. Cancel or Escape discards the draft;
+failed saves retain it. A 409 conflict indicates that another session updated
+the appearance; explicitly reload the latest values before trying again.
+Custom service labels/icons also appear in History and service details and
+remain visible while a service is Offline.
 
-When `ENABLE_AUTH=true`, authenticated same-origin clients can call:
+Editing neither executes recovery commands nor performs a discovery scan.
+The 30-second list reload does not overwrite an open edit form. If a renamed
+item no longer matches the active name filter, it is temporarily retained
+outside filtered results with an explanation and Clear name filter action.
+It disappears from this temporary view when filters or pagination change;
+server-reported counts and unrelated results remain unchanged.
+
+### Browser acceptance
+
+Run the existing `scripts/browser-contracts.mjs` checks through the fork's
+browser CI. The appearance contracts cover project/child independence,
+save/reset, upload preview, optimistic conflict behavior, reload while editing,
+draft cancellation, browser reload, and narrow/mobile viewports. For full
+database, authorization, upload validation and disk-reopen checks, use the
+targeted backend tests introduced by issues #76 and #77. Actual NixOS
+and Docker/proxy behavior still requires manual host acceptance.
+
+### API contract and prerequisites
+
+This frontend expects the revisioned, authenticated endpoints from #76/#77:
+
 - `PATCH /api/service-registry/:id/appearance`
 - `PATCH /api/service-registry/pinned-groups/:groupId/appearance`
+- `POST /api/service-registry/custom-icons` (raw local raster bytes)
+- `GET /api/service-registry/custom-icons/:hash` (protected, raster-only)
 
-Both accept `{"name":"New label","revision":0}` and reset with
-`{"name":null,"revision":1}`. Revisions are per target, start at zero, and
-advance on changes, including resets. Stale revisions return 409, invalid
-bodies return 400, missing IDs/unverified groups return 404, and writes are
-disabled (403) when global authentication is off. Names are trimmed,
-Unicode-NFC-normalized, limited to 80 code points, and cannot contain control
-or bidi-spoofing marks. Existing `displayName` consumers remain compatible.
-A separate Pinned Edit UI issue will provide the interactive rename controls.
-
-**Dormant group retention policy:** group annotations survive when all members
-are unpinned so they reappear on repin with verified matching provenance.
-They are intentionally not automatically removed on individual Forget or
-daemon disappearance; abandoned group annotations may be pruned by an
-administrator during an offline SQLite maintenance window, after backup.
-This avoids silently losing a user's label during temporary discovery loss.
-
-Manual NixOS verification: back up the persistent SQLite volume, upgrade the
-fork, rename a service and a verified Compose parent using authenticated API
-requests, run discovery, restart the container with its original data volume,
-and confirm both labels, resets, search, filtering, and retained pinned/notes
-data. No service restart commands are executed by name edits.
+Read models expose the effective `displayName` (service) or `name` (group),
+`detectedName`, `appearanceRevision`, and `iconChoice` (a safe object of
+type `automatic`, `glyph` plus a whitelisted `name`, or `upload` plus
+a validated `hash`). A name reset sends `name: null`; an icon reset
+sends `icon: "automatic"`; omitted fields are unchanged. The backend
+requires authenticated same-origin mutations. Merge the backend from #76/#77
+and revalidate this UI against it before release.
