@@ -185,16 +185,16 @@ offer fast Pin/Unpin on the summary card.
 
 ## User-defined display names (schema v11, fork issue #76)
 
-The underlying service \`registry_services.display_name\` remains auto-detected.
-An optional \`registry_service_appearance.name\` override is keyed **only** by
+The underlying service `registry_services.display_name` remains auto-detected.
+An optional `registry_service_appearance.name` override is keyed **only** by
 the immutable saved service ID. History, Pinned, and detail reads expose
-\`detectedName\`, \`customName\` (null if automatic), \`displayName\` (effective),
-\`appearanceRevision\`, and \`appearanceUpdatedAt\`. Search uses effective names.
+`detectedName`, `customName` (null if automatic), `displayName` (effective),
+`appearanceRevision`, and `appearanceUpdatedAt`. Search uses effective names.
 An unpin does not clear the override; Forget deletes the annotation. Scanner
 reconciliation never writes it and port reuse alone never transfers it.
 
-Verified Compose parent rows have separate \`registry_group_appearance\` entries,
-keyed by the server-generated \`compose:<hash>\` identity derived from server ID,
+Verified Compose parent rows have separate `registry_group_appearance` entries,
+keyed by the server-generated `compose:<hash>` identity derived from server ID,
 Docker daemon fingerprint, and Compose project. The parent name is independent
 of member names, pins and recovery instructions. Unverified groupings cannot
 read or change a verified parent override. A parent-name search includes its
@@ -202,17 +202,17 @@ eligible pinned children *after* status/source/port/seen-since filters; a
 child-name search filters the individual children before regrouping. Pagination
 continues to count groups after filtering.
 
-When \`ENABLE_AUTH=true\`, authenticated same-origin clients can call:
-- \`PATCH /api/service-registry/:id/appearance\`
-- \`PATCH /api/service-registry/pinned-groups/:groupId/appearance\`
+When `ENABLE_AUTH=true`, authenticated same-origin clients can call:
+- `PATCH /api/service-registry/:id/appearance`
+- `PATCH /api/service-registry/pinned-groups/:groupId/appearance`
 
-Both accept \`{"name":"New label","revision":0}\` and reset with
-\`{"name":null,"revision":1}\`. Revisions are per target, start at zero, and
+Both accept `{"name":"New label","revision":0}` and reset with
+`{"name":null,"revision":1}`. Revisions are per target, start at zero, and
 advance on changes, including resets. Stale revisions return 409, invalid
 bodies return 400, missing IDs/unverified groups return 404, and writes are
 disabled (403) when global authentication is off. Names are trimmed,
 Unicode-NFC-normalized, limited to 80 code points, and cannot contain control
-or bidi-spoofing marks. Existing \`displayName\` consumers remain compatible.
+or bidi-spoofing marks. Existing `displayName` consumers remain compatible.
 A separate Pinned Edit UI issue will provide the interactive rename controls.
 
 **Dormant group retention policy:** group annotations survive when all members

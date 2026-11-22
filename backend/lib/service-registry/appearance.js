@@ -18,7 +18,7 @@ function validateNamePatch(patch) {
   // Reject invalid Unicode, newlines, controls and direction-spoofing marks.
   if (!name || [...name].length > 80 ||
       Buffer.from(name, 'utf8').toString('utf8') !== name ||
-      /[\p{Cc}\u00ad\u061c\u200e\u200f\u202a-\u202e\u2066-\u206f]/u.test(name)) {
+      /[\p{Cc}\p{Zl}\p{Zp}\u00ad\u061c\u200b\u200e\u200f\u202a-\u202e\u2060-\u206f\ufeff]/u.test(name)) {
     throw new TypeError('Invalid appearance name');
   }
   return { name, revision: patch.revision };

@@ -81,7 +81,7 @@ describe('durable service and Compose presentation names (schema v11)', () => {
 
   test('rejects blank, control, bidi, invalid surrogate, and overlong names', () => {
     for (const value of ['', ' \t ', 'first\nsecond', 'a\u0000b',
-      'safe\u202eunsafe', '\u200eHidden', '\u061cHidden', '\ud800',
+      'safe\u202eunsafe', '\u200eHidden', '\u061cHidden', '\u2028newline', '\u200bHidden', '\ud800',
       'a'.repeat(81)]) {
       expect(() => validateNamePatch({ name: value, revision: 0 }))
         .toThrow('Invalid appearance name');
