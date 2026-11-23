@@ -10,6 +10,7 @@ import { generatePortKey, getAutoxposeData } from "../../lib/utils/portUtils";
 import { formatCreatedDate, formatCreatedTooltip } from "@/lib/utils";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import { ClickablePortBadge } from "./service-card-utils";
+import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
 import { GlobeIconBadge, ExternalUrlChip } from "@/components/autoxpose";
 import { InlinePortRow } from "./ExpandedPortViews";
 import { AggregatedHealthDot } from "./AggregatedHealthDot";
@@ -113,6 +114,7 @@ export function ServiceCardTableRow({
             <span className="font-medium text-sm text-slate-900 dark:text-slate-100">
               {serviceName}
             </span>
+            <LiveRegistryPinButton ports={publishedPorts} serverId={serverId} compact />
           </div>
         </td>
         <td className="px-4 py-3">

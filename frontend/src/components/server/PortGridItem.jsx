@@ -191,9 +191,10 @@ export function PortGridItem({
           )}
         </div>
         
-        <div className="flex items-center space-x-0.5 opacity-40 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 [@media(hover:none)]:group-active:opacity-100 [@media(hover:none)]:opacity-40 transition-opacity ml-2">
+        <div className="flex flex-wrap items-center gap-1 ml-2">
           <PortActions
             port={port}
+            serverId={serverId}
             itemKey={generatePortKey(serverId, port)}
             actionFeedback={actionFeedback}
             onCopy={() => onCopy(port, protocol)}

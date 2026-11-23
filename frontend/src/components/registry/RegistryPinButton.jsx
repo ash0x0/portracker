@@ -19,7 +19,7 @@ export function RegistryPinButton({
 }) {
   const pinned = Boolean(service.pinned);
   return (
-    <button type="button" onClick={() => onToggle(service)} disabled={busy}
+    <button type="button" onClick={event => { event.stopPropagation(); onToggle(service); }} disabled={busy}
       aria-label={ariaLabel || (pinned ? "Unpin service" : "Pin service")}
       aria-pressed={pinned} aria-busy={busy}
       data-registry-pin-state={pinned ? "pinned" : "unpinned"}

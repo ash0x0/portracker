@@ -1,8 +1,10 @@
 import { Copy, Edit, EyeOff, Eye } from "lucide-react";
 import { ActionButton } from "./ActionButton";
+import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
 
 export function PortActions({
   port,
+  serverId,
   itemKey,
   actionFeedback,
   onCopy,
@@ -11,7 +13,8 @@ export function PortActions({
   size,
 }) {
   return (
-    <div className="flex items-center space-x-1">
+    <div className="flex flex-wrap items-center gap-1">
+      <LiveRegistryPinButton ports={[port]} serverId={serverId} compact />
       <ActionButton
         type="copy"
         itemKey={itemKey}

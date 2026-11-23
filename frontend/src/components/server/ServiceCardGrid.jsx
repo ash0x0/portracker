@@ -10,6 +10,7 @@ import { generatePortKey, getAutoxposeData } from "../../lib/utils/portUtils";
 import { formatCreatedDate, formatCreatedTooltip } from "@/lib/utils";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import { ClickablePortBadge } from "./service-card-utils";
+import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
 import { GlobeIconBadge, ExternalUrlChip } from "@/components/autoxpose";
 import { AggregatedHealthDot } from "./AggregatedHealthDot";
 
@@ -128,6 +129,7 @@ export function ServiceCardGrid({
         </div>
 
         <div className="flex flex-wrap gap-1.5 mb-3">
+          <LiveRegistryPinButton ports={publishedPorts} serverId={serverId} compact />
           {publishedPorts.map((port) => (
             <React.Fragment key={generatePortKey(serverId, port)}>
               <ClickablePortBadge

@@ -38,6 +38,17 @@ function createRegistryRouter(registry, {
     }
   });
 
+  // Read-only mapping for Live Ports. The frontend may only update unique,
+  // exact local service IDs through the existing pin endpoint.
+  router.get('/live-pins', requireAuth, (_req, res) => {
+    try {
+      res.set('Cache-Control', 'no-store');
+      return res.json(registry.listLivePinTargets());
+    } catch {
+      return res.status(500).json({ error: 'Unable to load live pin targets' });
+    }
+  });
+
   // One bounded response for the Pinned Services view. Grouping never
   // changes ownership of pins, recovery notes, or source-specific history.
   router.get('/pinned-groups', requireAuth, (req, res) => {

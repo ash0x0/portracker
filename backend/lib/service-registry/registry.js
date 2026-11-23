@@ -203,6 +203,29 @@ function createServiceRegistry(db) {
       endpoints: getEndpoints.all(id).map(toEndpoint) } : null;
   }
 
+  // Only expose endpoints from a service's current positive observation. Old
+  // ports on an otherwise listening service must not be offered as pin targets.
+  const livePinQuery = db.prepare(
+    'SELECT s.id, s.is_pinned, s.source, e.host_ip, e.host_port, e.protocol, ' +
+    'e.internal, s.identity_confidence FROM registry_services s ' +
+    'JOIN registry_endpoints e ON e.service_id = s.id ' +
+    "WHERE s.server_id = 'local' AND s.status = 'listening' " +
+    'AND e.last_seen_at = s.last_seen_at AND e.source = s.source ' +
+    'ORDER BY s.id, e.host_port LIMIT 3001'
+  );
+
+  function listLivePinTargets() {
+    const rows = livePinQuery.all();
+    return {
+      truncated: rows.length > 3000,
+      items: rows.slice(0, 3000).map(row => ({
+        id: row.id, pinned: Boolean(row.is_pinned), source: row.source,
+        hostIp: row.host_ip, hostPort: row.host_port, protocol: row.protocol,
+        internal: Boolean(row.internal), identityConfidence: row.identity_confidence,
+      })),
+    };
+  }
+
   function listServices(filters = {}) {
     const limit = boundedInteger(filters.limit, 'limit', 50, 100, 1);
     const offset = boundedInteger(filters.offset, 'offset', 0, 1000000);
@@ -537,6 +560,7 @@ function createServiceRegistry(db) {
     observe: (row, options = {}) => getService(insertObservation(row, options)),
     getService,
     listServices,
+    listLivePinTargets,
     listPinnedGroups,
     setServiceAppearance,
     setGroupAppearance,

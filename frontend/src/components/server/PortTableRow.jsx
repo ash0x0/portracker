@@ -312,9 +312,10 @@ function PortTableRowComponent({
 
       
       <td className="px-2 py-2 text-right whitespace-nowrap">
-        <div className="opacity-40 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 [@media(hover:none)]:group-active:opacity-100 [@media(hover:none)]:opacity-40 transition-opacity">
+        <div className="flex flex-wrap items-center gap-1">
           <PortActions
             port={port}
+            serverId={serverId}
             itemKey={itemKey}
             actionFeedback={actionFeedback}
             onCopy={() => onCopy(port, protocol)}
