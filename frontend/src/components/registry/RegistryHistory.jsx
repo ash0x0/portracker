@@ -9,6 +9,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useRef, useState } from
 import { History, Pin, RefreshCw, ScanSearch, Search } from "lucide-react";
 import {
   getRegistryService,
+  getRegistryServices,
   getRegistryScanStatus,
   scanRegistryNow,
   setRegistryServicePinned,
