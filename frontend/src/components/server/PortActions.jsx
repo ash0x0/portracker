@@ -1,6 +1,7 @@
 import { Copy, Edit, EyeOff, Eye } from "lucide-react";
 import { ActionButton } from "./ActionButton";
 import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 
 export function PortActions({
   port,
@@ -15,6 +16,7 @@ export function PortActions({
   return (
     <div className="flex flex-wrap items-center gap-1">
       <LiveRegistryPinButton ports={[port]} serverId={serverId} compact />
+      {serverId === "local" && <OpenPortLink port={port.host_port} protocol={port.protocol} internal={port.internal} />}
       <ActionButton
         type="copy"
         itemKey={itemKey}

@@ -11,6 +11,7 @@ import { formatCreatedDate, formatCreatedTooltip } from "@/lib/utils";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import { ClickablePortBadge } from "./service-card-utils";
 import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 import { GlobeIconBadge, ExternalUrlChip } from "@/components/autoxpose";
 import { InlinePortRow } from "./ExpandedPortViews";
 import { AggregatedHealthDot } from "./AggregatedHealthDot";
@@ -119,6 +120,7 @@ export function ServiceCardTableRow({
         </td>
         <td className="px-4 py-3">
           <div className="flex items-center space-x-1 flex-wrap gap-1">
+            {serverId === "local" && <OpenPortLink port={publishedPorts.find(port => port.protocol === "tcp")?.host_port} showPort={publishedPorts.length > 1} />}
             {publishedPorts.map((port) => (
               <React.Fragment key={generatePortKey(serverId, port)}>
                 <ClickablePortBadge

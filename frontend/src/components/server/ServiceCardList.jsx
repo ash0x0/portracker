@@ -16,6 +16,7 @@ import { formatCreatedDate, formatCreatedTooltip } from "@/lib/utils";
 import ServiceIcon from "@/components/ui/ServiceIcon";
 import { ClickablePortBadge } from "./service-card-utils";
 import { LiveRegistryPinButton } from "@/components/registry/LiveRegistryPinButton";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 import { GlobeIconBadge, ExternalUrlChip } from "@/components/autoxpose";
 import { AggregatedHealthDot } from "./AggregatedHealthDot";
 
@@ -144,6 +145,7 @@ export function ServiceCardList({
 
         <div className="flex items-center space-x-2">
           <LiveRegistryPinButton ports={publishedPorts} serverId={serverId} compact />
+          {serverId === "local" && <OpenPortLink port={publishedPorts.find(port => port.protocol === "tcp")?.host_port} showPort={publishedPorts.length > 1} />}
           {publishedPorts.map((port) => {
             const autoxposeData = getAutoxposeData(autoxposePorts, port);
             return (

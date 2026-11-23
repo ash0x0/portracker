@@ -3,6 +3,7 @@ import { Pencil, Pin } from "lucide-react";
 import { RegistryAppearanceEditor } from "./RegistryAppearanceEditor";
 import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { RegistryServiceDetails } from "./RegistryServiceDetails";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 import {
   SERVICE_CARD_CLASS, SERVICE_CARD_HEADER_CLASS, SERVICE_CARD_BODY_CLASS,
   SERVICE_CARD_TITLE_CLASS, SERVICE_CARD_META_CLASS,
@@ -65,14 +66,15 @@ export function RegistryPinnedGroup({
   pinBusy, forgetting,
 }) {
   const selected = group.services.find(service => service.id === selectedId);
+  const linkEndpoint = group.ports.find(port => port.active && !port.internal && port.protocol === "tcp") ||
+    group.ports.find(port => !port.internal && port.protocol === "tcp");
   return (
     <article data-pinned-group={group.id} data-service-list-surface="pinned"
       className={SERVICE_CARD_CLASS}>
+      <div data-service-list-header className={SERVICE_CARD_HEADER_CLASS}>
       <button type="button" onClick={() => onToggle(group)}
         aria-expanded={expanded} aria-label={group.name + " service group"}
-        data-service-list-header
-        className={SERVICE_CARD_HEADER_CLASS +
-          " w-full text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
+        className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
         <span className="flex min-w-0 flex-1 items-center gap-3">
           <ServiceListChevron expanded={expanded} />
           <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice} name={group.detectedName || group.name}
@@ -92,6 +94,10 @@ export function RegistryPinnedGroup({
           )}
         </span>
       </button>
+      {linkEndpoint && <OpenPortLink port={linkEndpoint.port} protocol={linkEndpoint.protocol}
+        httpRootUrl={group.services.find(service => linkEndpoint.serviceIds?.includes(service.id))?.httpRootUrl}
+        internal={linkEndpoint.internal} offline={!linkEndpoint.active} showPort />}
+      </div>
       {expanded && (
         <div className={SERVICE_CARD_BODY_CLASS + " min-w-0 space-y-4 p-4"}>
           <div className="flex flex-wrap justify-end gap-2">
@@ -113,7 +119,11 @@ export function RegistryPinnedGroup({
             <div aria-label="All remembered group ports" className="flex flex-wrap items-center gap-2">
               <span className={SERVICE_CARD_META_CLASS}>Ports</span>
               {group.ports.map(item => (
-                <PortChip key={item.protocol + ":" + item.port} item={item} />
+                <React.Fragment key={item.protocol + ":" + item.port}>
+                  <PortChip item={item} />
+                  <OpenPortLink port={item.port} protocol={item.protocol} internal={item.internal}
+                    offline={!item.active} showPort />
+                </React.Fragment>
               ))}
             </div>
           )}
