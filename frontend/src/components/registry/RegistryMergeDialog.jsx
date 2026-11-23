@@ -70,7 +70,7 @@ export function RegistryMergeDialog({ target, onMerged, onClose }) {
         <label className="block space-y-1 text-sm">
           <span>Find another service by name or port</span>
           <input value={query} maxLength={100} disabled={busy}
-            onChange={event => { setQuery(event.target.value); setSourceId(""); setError(""); }}
+            onChange={event => { setQuery(event.target.value); setChoices([]); setLoading(true); setSourceId(""); setError(""); }}
             placeholder="e.g. opencode or 49374" className={FIELD_CLASS + " w-full"}
             aria-label="Search for a service to merge" />
         </label>
