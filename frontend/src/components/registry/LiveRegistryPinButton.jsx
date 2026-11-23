@@ -1,7 +1,7 @@
-import React, { createContext, useCallback, useContext, useEffect, useState } from "react";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from "react";
 import { Pin } from "lucide-react";
 import { getRegistryLivePinTargets, setRegistryServicePinned } from "@/lib/api/serviceRegistry";
-import { matchLivePinTarget } from "@/lib/live-registry-pins.mjs";
+import { matchLivePinTarget, reconcileLivePinSnapshot } from "@/lib/live-registry-pins.mjs";
 import { RegistryPinButton } from "./RegistryPinButton";
 
 const LivePinsContext = createContext(null);
@@ -10,14 +10,23 @@ export function LiveRegistryPinProvider({ children }) {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState("");
   const [busyId, setBusyId] = useState(null);
+  const confirmedPins = useRef(new Map());
+  const latestRequest = useRef(0);
 
   useEffect(() => {
     const controller = new AbortController();
-    const load = () => getRegistryLivePinTargets(controller.signal).then(data => {
-      if (!controller.signal.aborted) setSnapshot(data);
-    }).catch(failure => {
-      if (!controller.signal.aborted) setError(failure.message || "Unable to load service pins");
-    });
+    const load = () => {
+      const requestId = ++latestRequest.current;
+      getRegistryLivePinTargets(controller.signal).then(data => {
+        if (controller.signal.aborted || requestId !== latestRequest.current) return;
+        setSnapshot(reconcileLivePinSnapshot(data, confirmedPins.current));
+        setError("");
+      }).catch(failure => {
+        if (!controller.signal.aborted && requestId === latestRequest.current) {
+          setError(failure.message || "Unable to load service pins");
+        }
+      });
+    };
     load();
     const timer = setInterval(load, 30000);
     return () => { controller.abort(); clearInterval(timer); };
@@ -29,6 +38,7 @@ export function LiveRegistryPinProvider({ children }) {
     setError("");
     try {
       const result = await setRegistryServicePinned(service.id, !service.pinned);
+      confirmedPins.current.set(result.id, result.pinned);
       setSnapshot(previous => previous && ({
         ...previous,
         items: previous.items.map(item => item.id === result.id
