@@ -126,6 +126,24 @@ describe('registry REST API authorization and validation', () => {
     }
   ));
 
+  test('read-only live pin lookup exposes saved current service IDs and requires auth', async () => withServer(
+    async ({ registry, url }) => {
+      process.env.ENABLE_AUTH = 'false';
+      const first = registry.observe({
+        host_ip: '127.0.0.1', host_port: 4177, protocol: 'tcp',
+        source: 'system', owner: 'node', pid: 111,
+      });
+      const response = await fetch(url + '/live-pins');
+      expect(response.status).toBe(200);
+      expect(response.headers.get('cache-control')).toBe('no-store');
+      expect(await response.json()).toMatchObject({
+        truncated: false, items: [{ id: first.id, hostPort: 4177, pinned: false }],
+      });
+      process.env.ENABLE_AUTH = 'true';
+      expect((await fetch(url + '/live-pins')).status).toBe(401);
+    }
+  ));
+
   test('manual POST requires authentication and opt-in; GET refresh never scans', async () => withServer(
     async ({ url }) => {
       process.env.ENABLE_AUTH = 'false';
