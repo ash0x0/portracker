@@ -235,6 +235,23 @@ function createRegistryRouter(registry, {
     }
   });
 
+  // An explicit irreversible user assertion, not an automatic identity guess.
+  router.post('/:id/merge', requireAllowedOrigin, requireAuth, (req, res) => {
+    if (process.env.ENABLE_AUTH !== 'true') {
+      return res.status(403).json({ error: 'Merging services requires authentication' });
+    }
+    try {
+      const result = registry.mergeServices(req.params.id, req.body?.sourceId);
+      if (!result) return res.status(404).json({ error: 'One of the saved services was not found' });
+      res.set('Cache-Control', 'no-store');
+      return res.json(result);
+    } catch (error) {
+      if (error.code === 'merge_conflict') return res.status(409).json({ error: error.message });
+      if (error instanceof TypeError) return res.status(400).json({ error: error.message });
+      return res.status(500).json({ error: 'Unable to merge saved services' });
+    }
+  });
+
   // Bookmark a durable logical service, never a network port or a process PID.
   router.put('/:id/pin', requireAuth, (req, res) => {
     try {
