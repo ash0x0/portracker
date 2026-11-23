@@ -257,6 +257,20 @@ function migrateRegistrySchema(db) {
       'hash TEXT PRIMARY KEY, mime TEXT NOT NULL, bytes BLOB NOT NULL, created_at INTEGER NOT NULL)');
     db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
       .run(12, Date.now());
+    // Additive v13: explicit user-confirmed aliases preserve both process
+    // episodes across future scans; no existing records are auto-merged.
+    db.exec([
+      'CREATE TABLE IF NOT EXISTS registry_identity_aliases (',
+      ' server_id TEXT NOT NULL, source TEXT NOT NULL,',
+      " identity_kind TEXT NOT NULL CHECK (identity_kind IN ('process','logical')),",
+      ' identity_key TEXT NOT NULL,',
+      ' service_id TEXT NOT NULL REFERENCES registry_services(id) ON DELETE CASCADE,',
+      ' PRIMARY KEY (server_id, source, identity_kind, identity_key)',
+      ');',
+      'CREATE INDEX IF NOT EXISTS idx_registry_alias_service ON registry_identity_aliases(service_id);',
+    ].join('\n'));
+    db.prepare('INSERT OR IGNORE INTO registry_schema_versions (version, applied_at) VALUES (?, ?)')
+      .run(13, Date.now());
   });
   migrate();
 }
