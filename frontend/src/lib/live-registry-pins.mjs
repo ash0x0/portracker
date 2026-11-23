@@ -35,3 +35,23 @@ export function matchLivePinTarget(ports, targets, truncated = false) {
   }
   return { target: matched[0], reason: null };
 }
+
+/**
+ * A read started before a pin mutation may finish after it. Keep the confirmed
+ * mutation authoritative until a later registry response acknowledges it.
+ */
+export function reconcileLivePinSnapshot(snapshot, confirmedPins) {
+  if (!snapshot || !Array.isArray(snapshot.items)) return snapshot;
+  return {
+    ...snapshot,
+    items: snapshot.items.map(item => {
+      if (!confirmedPins.has(item.id)) return item;
+      const pinned = confirmedPins.get(item.id);
+      if (item.pinned === pinned) {
+        confirmedPins.delete(item.id);
+        return item;
+      }
+      return { ...item, pinned };
+    }),
+  };
+}
