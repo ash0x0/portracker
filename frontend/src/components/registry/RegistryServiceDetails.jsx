@@ -6,6 +6,7 @@ import { RegistryDockerProvenance } from "./RegistryDockerProvenance";
 import { RegistryLinuxProvenance } from "./RegistryLinuxProvenance";
 import { RegistryDetailSection } from "./RegistryDetailSection";
 import { RegistryServiceIcon } from "./RegistryServiceIcon";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 import { registryStatusLabel, registryTimestamp } from "../../lib/registry-utils.mjs";
 
 const STATUS_CLASSES = {
@@ -64,6 +65,8 @@ export function RegistryServiceDetails({
                   source={detail.source === "docker" ? "docker" : "system"} size={28} />
                 <strong>{detail.displayName}</strong>
                 <StatusBadge status={detail.status} />
+                <OpenPortLink port={detail.endpoints?.find(endpoint => !endpoint.internal && endpoint.protocol === "tcp")?.hostPort}
+                  httpRootUrl={detail.httpRootUrl} offline={detail.status !== "listening"} showPort />
                 <span className="text-xs text-slate-500">{detail.identityConfidence} identity</span>
               </div>
               {detail.httpTitle && (
@@ -102,8 +105,14 @@ export function RegistryServiceDetails({
               <RegistryDetailSection title="Remembered endpoints">
               <ul className="list-disc pl-5 text-sm space-y-1 text-slate-600 dark:text-slate-300">
                 {detail.endpoints.slice(0, 20).map(ep => (
-                  <li key={ep.id}>{ep.hostIp}:{ep.hostPort}/{ep.protocol} · {ep.source}
-                    {" · "}Last seen {registryTimestamp(ep.lastSeenAt)}</li>
+                  <li key={ep.id} className="py-1">
+                    <span>{ep.hostIp}:{ep.hostPort}/{ep.protocol} · {ep.source}
+                      {" · "}Last seen {registryTimestamp(ep.lastSeenAt)}</span>
+                    <OpenPortLink port={ep.hostPort} protocol={ep.protocol} internal={ep.internal}
+                      httpRootUrl={detail.httpRootUrl}
+                      offline={detail.status !== "listening" || ep.lastSeenAt !== detail.lastSeenAt}
+                      showPort className="ml-2" />
+                  </li>
                 ))}
               </ul>
               {detail.endpoints.length > 20 && (

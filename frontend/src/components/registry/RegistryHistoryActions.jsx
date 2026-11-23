@@ -2,6 +2,7 @@ import React from "react";
 import { Trash2, X } from "lucide-react";
 import { RegistryPinButton } from "./RegistryPinButton";
 import { StatusBadge } from "./RegistryServiceDetails";
+import { OpenPortLink } from "@/components/ui/OpenPortLink";
 
 const FIELD_CLASS = "rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm";
 
@@ -11,6 +12,8 @@ export function RegistryHistoryActions({
   return (
     <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
       <StatusBadge status={service.status} />
+      <OpenPortLink port={service.previewPort} protocol={service.previewProtocol || "tcp"}
+        httpRootUrl={service.httpRootUrl} offline={service.status !== "listening"} showPort />
       <RegistryPinButton service={service} onToggle={onPinToggle} busy={pinBusy}
         compact labelClassName={expanded ? "hidden sm:inline" : "hidden"}
         ariaLabel={(service.pinned ? "Unpin " : "Pin ") + service.displayName} />
