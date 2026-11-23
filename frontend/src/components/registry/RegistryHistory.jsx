@@ -1,5 +1,6 @@
 import { RegistryCapabilities } from "./RegistryCapabilities";
 import { RegistryHistoryCard } from "./RegistryHistoryCard";
+import { RegistryInventoryComparison } from "./RegistryInventoryComparison";
 import { RegistryMergeDialog } from "./RegistryMergeDialog";
 import { RegistryScanSummary } from "./RegistryScanSummary";
 import {
@@ -11,6 +12,7 @@ import {
   getRegistryService,
   getRegistryServices,
   getRegistryScanStatus,
+  getRegistryLivePinTargets,
   scanRegistryNow,
   setRegistryServicePinned,
   forgetRegistryService,
@@ -32,7 +34,7 @@ function rememberScrollContainers(element) {
   return containers;
 }
 
-export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) {
+export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null, liveLocal = null }) {
   const [query, setQuery] = useState("");
   const [search, setSearch] = useState("");
   const [portText, setPortText] = useState("");
@@ -43,6 +45,8 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   const [version, setVersion] = useState(0);
   const [data, setData] = useState({ items: [], total: 0 });
   const [scan, setScan] = useState(null);
+  const [liveTargets, setLiveTargets] = useState(null);
+  const [liveTargetsError, setLiveTargetsError] = useState("");
   const [loading, setLoading] = useState(true);
   const hasLoadedListRef = useRef(false);
   const [error, setError] = useState("");
@@ -105,6 +109,20 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
     getRegistryScanStatus(controller.signal).then(result => {
       if (!controller.signal.aborted) setScan(result);
     }).catch(() => undefined);
+    return () => controller.abort();
+  }, [version]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    setLiveTargetsError("");
+    getRegistryLivePinTargets(controller.signal).then(result => {
+      if (!controller.signal.aborted) setLiveTargets(result);
+    }).catch(error => {
+      if (!controller.signal.aborted) {
+        setLiveTargets(null);
+        setLiveTargetsError(error.message || "Unable to load saved endpoints");
+      }
+    });
     return () => controller.abort();
   }, [version]);
 
@@ -234,6 +252,8 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
       </div>
 
       <RegistryScanSummary scan={scan} />
+      {!pinnedOnly && <RegistryInventoryComparison live={liveLocal}
+        targets={liveTargets} scan={scan} error={liveTargetsError} />}
       <RegistryCapabilities scan={scan} />
       {scanMessage && <p role="status" className="text-sm text-slate-600 dark:text-slate-300">{scanMessage}</p>}
       {scanError && <p role="alert" className="text-sm text-red-600">{scanError}</p>}
