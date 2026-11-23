@@ -5,7 +5,8 @@ const { requireAuth, requireAllowedOrigin } = require('../middleware/auth');
 const { buildRecoveryRecipes } = require('../lib/service-registry/recovery-recipes');
 
 function createRegistryRouter(registry, {
-  scanEnabled = false, scanner = null, httpStore = null, provenanceStore = null,
+  scanEnabled = false, scanIntervalMs = 30000,
+  scanner = null, httpStore = null, provenanceStore = null,
   dockerProvenanceStore = null, recoveryNotesStore = null,
   customIconStore = null, getCapabilities = null,
 } = {}) {
@@ -117,6 +118,7 @@ function createRegistryRouter(registry, {
     const sources = registry.getScanStatus('local');
     res.json({
       enabled: scanEnabled,
+      intervalMs: scanIntervalMs,
       sources,
       ...(typeof getCapabilities === 'function'
         ? { capabilities: getCapabilities(sources) } : {}),
