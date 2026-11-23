@@ -7,6 +7,7 @@ const { createSourceLinks } = require('./source-links');
 const { groupPinnedServices, composeGroupId } = require('./pinned-groups');
 const { createAppearanceStore, decodeIconChoice } = require('./appearance');
 const { createServiceMerger } = require('./service-merge');
+const { createEndpointReconciler, endpointKey } = require('./endpoint-reconcile');
 
 function toService(row) {
   if (!row) return null;
@@ -71,6 +72,7 @@ function createServiceRegistry(db) {
   migrateRegistrySchema(db);
   const sourceLinks = createSourceLinks(db);
   const appearance = createAppearanceStore(db);
+  const endpointReconciler = createEndpointReconciler(db);
 
   const findAlias = db.prepare(
     'SELECT s.id, s.status FROM registry_identity_aliases a ' +
@@ -157,6 +159,11 @@ function createServiceRegistry(db) {
     }
     if (!existing && item.logicalKey && !startNewEpisode) {
       existing = findAlias.get(item.serverId, item.source, 'logical', item.logicalKey);
+    }
+    if (!existing && options.allowEndpointReuse === true) {
+      existing = endpointReconciler.findReusable(
+        item, at, options.currentProcessKeys, options.endpointCounts
+      );
     }
     if (!existing && item.logicalKey) {
       const candidates = findLogicalCandidates.all(item.serverId, item.source, item.logicalKey);
@@ -540,6 +547,11 @@ function createServiceRegistry(db) {
     // executable/cwd from being folded into one logical record.
     const items = rows.map(row => normalizeObservation(row, serverId));
     const currentProcessKeys = new Set(items.map(item => item.identityKey).filter(Boolean));
+    const endpointCounts = new Map();
+    for (const item of items) {
+      const key = endpointKey(item);
+      endpointCounts.set(key, (endpointCounts.get(key) || 0) + 1);
+    }
     const observed = new Set();
     for (const row of rows) {
       const item = normalizeObservation(row, serverId);
@@ -549,7 +561,8 @@ function createServiceRegistry(db) {
       const serviceId = insertObservation(row, {
         serverId, at,
         allowActiveReuse: complete && source === 'system',
-        currentProcessKeys,
+        allowEndpointReuse: complete && source === 'system',
+        currentProcessKeys, endpointCounts,
       });
       observed.add(serviceId);
       if (onObservation) onObservation(serviceId, row, at);
@@ -565,6 +578,11 @@ function createServiceRegistry(db) {
       'UPDATE registry_services SET status = ?, updated_at = MAX(updated_at, ?) ' +
       'WHERE server_id = ? AND source = ?' + excluded
     ).run(status, at, serverId, source, ...ids);
+    // Migrate already-duplicated offline/current pairs only after a complete
+    // authoritative system snapshot; ambiguity or user conflicts leave both.
+    if (complete && source === 'system') {
+      endpointReconciler.coalesceCurrent(serverId, at, mergeServices);
+    }
 
     const outcome = complete ? 'complete' : (rows.length ? 'partial' : 'failed');
     saveScan.run(serverId, source, at, complete ? at : null, outcome, errorCode);
