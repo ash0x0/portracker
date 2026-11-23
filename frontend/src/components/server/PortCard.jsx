@@ -292,7 +292,7 @@ function PortCardComponent({
       </div>
 
       <div className="flex items-center gap-2">
-        <div className="opacity-40 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 [@media(hover:none)]:group-active:opacity-100 [@media(hover:none)]:opacity-40 transition-opacity">
+        <div className="flex flex-wrap items-center gap-1">
           <PortActions
             port={port}
             serverId={serverId}
