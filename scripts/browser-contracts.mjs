@@ -190,7 +190,6 @@ async function applyRegistrySearch(page, search) {
   await applied;
   await page.waitForTimeout(100);
 }
-
 async function recoveryCommandFlow(page) {
     const commandField = page.getByRole('textbox', { name: 'One-line startup command' });
     const commandText = page.getByTestId('registry-start-command-text');
@@ -212,7 +211,6 @@ async function recoveryCommandFlow(page) {
     assert.equal(await commandField.count(), 0,
       'After Save the command must be ordinary text, not a readOnly input');
     assert.equal((await commandText.textContent()).trim(), updatedCommand);
-
     await page.evaluate(() => {
       Object.defineProperty(navigator, 'clipboard', {
         configurable: true,
