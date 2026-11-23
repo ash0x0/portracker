@@ -483,7 +483,7 @@ export function RegistryPinned({ onBrowseHistory }) {
                 onToggle={toggleGroup} onSelect={setSelectedId}
                 onPinToggle={handleUnpin}
                 onForget={service => { setForgetTargetId(service.id); setDetailError(""); setForgetDialogOpen(true); }}
-                 onMerge={() => setMergeOpen(true)}
+                onMerge={() => setMergeOpen(true)}
                 onClose={() => { setExpandedGroupId(null); setSelectedId(null); closeEditor(); }}
                 onEditGroup={editGroup} onEditService={editService}
                 editor={editor?.groupId === group.id ? editor : null}
