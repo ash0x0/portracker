@@ -315,6 +315,7 @@ function PortTableRowComponent({
         <div className="opacity-40 group-hover:opacity-100 group-focus-within:opacity-100 group-active:opacity-100 [@media(hover:none)]:group-active:opacity-100 [@media(hover:none)]:opacity-40 transition-opacity">
           <PortActions
             port={port}
+            serverId={serverId}
             itemKey={itemKey}
             actionFeedback={actionFeedback}
             onCopy={() => onCopy(port, protocol)}
