@@ -48,6 +48,30 @@ describe('persistent localhost registry storage', () => {
     expect(registry.getService(first.id).lastSeenAt).toBe(2000);
   }));
 
+  test('live pin targets retain only current local endpoints and persisted pin state', () => fixture((_db, registry) => {
+    const first = registry.observe(port({ host_port: 4177 }), { at: 1000 });
+    registry.observe(port({ host_port: 4178 }), { at: 2000 });
+    const current = registry.listLivePinTargets();
+    expect(current.truncated).toBe(false);
+    expect(current.items).toHaveLength(1);
+    expect(current.items[0]).toMatchObject({
+      id: first.id, hostIp: '127.0.0.1', hostPort: 4178,
+      protocol: 'tcp', source: 'system', pinned: false,
+    });
+    registry.setPinned(first.id, true, 2100);
+    expect(registry.listLivePinTargets().items[0].pinned).toBe(true);
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 3000 });
+    expect(registry.listLivePinTargets().items).toEqual([]);
+  }));
+
+  test('same endpoint from old and current identities offers only the current listener', () => fixture((_db, registry) => {
+    const old = registry.observe(port({ pid: 101 }), { at: 1000 });
+    registry.reconcileSource({ source: 'system', rows: [], complete: true, at: 1500 });
+    const current = registry.observe(port({ pid: 202 }), { at: 2000 });
+    expect(current.id).not.toBe(old.id);
+    expect(registry.listLivePinTargets().items.map(item => item.id)).toEqual([current.id]);
+  }));
+
   test('one observed process can have multiple endpoints', () => fixture((_db, registry) => {
     const a = registry.observe(port(), { at: 1000 });
     const b = registry.observe(port({ host_port: 3001 }), { at: 1100 });
