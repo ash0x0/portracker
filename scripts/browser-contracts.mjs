@@ -286,6 +286,9 @@ async function registryHistoryNavigation(page, options) {
     await assertFlatRegistryDetails(page, { linux: true });
     await page.getByText('Verified Local Root', { exact: true }).first().waitFor();
     await page.locator('img[src="/api/service-registry/icons/' + 'a'.repeat(64) + '"]').first().waitFor();
+    await page.getByRole('button', { name: /^example-service-79\\b/ }).click();
+    assert.equal(await page.getByRole('button', { name: /^example-service-79\\b/ }).getAttribute('aria-expanded'),
+      'false', 'History Forget should also work while a card is collapsed');
     const forget = page.getByRole('button', { name: 'Forget example-service-79' });
     await forget.click();
     const confirmation = page.getByRole('dialog', { name: 'Forget saved service?' });
