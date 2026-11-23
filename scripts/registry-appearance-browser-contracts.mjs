@@ -135,6 +135,34 @@ export async function appearanceBrowserContracts(context, options) {
     await projectForm.waitFor({ state: 'hidden' });
     assert.equal(await page.getByRole('button', { name: 'Personal infrastructure service group' }).count(), 1);
     await singleServiceAppearanceContracts(page, records);
+
+    // Pinned merges a selected service, even if the candidate belongs to a group.
+    await page.getByRole('button', { name: 'Personal infrastructure service group' }).click();
+    await page.getByRole('button', { name: 'Merge another service into example-service-78' }).click();
+    const merge = page.getByRole('dialog', { name: 'Merge saved services' });
+    await merge.getByRole('textbox', { name: 'Search for a service to merge' }).fill('example-service-81');
+    await merge.getByRole('radio', { name: /example-service-81/ }).check();
+    await merge.getByRole('button', { name: 'Confirm merge' }).click();
+    await merge.waitFor({ state: 'hidden' });
+    assert.equal(records.some(item => item.id === 'history-fixture-81'), false,
+      'Pinned merge must remove only the selected source record');
+    assert.equal(records.some(item => item.id === 'history-fixture-78'), true,
+      'Pinned merge must preserve target ID');
+
+    // Forget on a collapsed single-service Pinned group must delete that service,
+    // not the last selected member in another expanded group.
+    const singleton = page.getByRole('button', { name: 'My native host service group' });
+    assert.equal(await singleton.getAttribute('aria-expanded'), 'false');
+    await page.getByRole('button', { name: 'Forget My native host' }).click();
+    const forget = page.getByRole('dialog', { name: 'Forget saved service?' });
+    await forget.getByRole('button', { name: 'Cancel' }).click();
+    assert.equal(records.some(item => item.id === 'history-fixture-95'), true);
+    await page.getByRole('button', { name: 'Forget My native host' }).click();
+    await forget.getByRole('button', { name: 'Forget service' }).click();
+    await forget.waitFor({ state: 'hidden' });
+    assert.equal(records.some(item => item.id === 'history-fixture-95'), false,
+      'Collapsed Pinned Forget must target its own service ID');
+    assert.equal(records.some(item => item.id === 'history-fixture-78'), true);
   } finally {
     await page.evaluate(() => localStorage.setItem('portrackerActiveView', 'live'))
       .catch(() => undefined);
