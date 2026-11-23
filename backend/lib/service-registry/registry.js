@@ -6,6 +6,7 @@ const { normalizeObservation, validServerId, normalizePort } = require('./identi
 const { createSourceLinks } = require('./source-links');
 const { groupPinnedServices, composeGroupId } = require('./pinned-groups');
 const { createAppearanceStore, decodeIconChoice } = require('./appearance');
+const { createServiceMerger } = require('./service-merge');
 
 function toService(row) {
   if (!row) return null;
@@ -71,6 +72,11 @@ function createServiceRegistry(db) {
   const sourceLinks = createSourceLinks(db);
   const appearance = createAppearanceStore(db);
 
+  const findAlias = db.prepare(
+    'SELECT s.id, s.status FROM registry_identity_aliases a ' +
+    'JOIN registry_services s ON s.id = a.service_id ' +
+    'WHERE a.server_id = ? AND a.source = ? AND a.identity_kind = ? AND a.identity_key = ?'
+  );
   const findIdentity = db.prepare(
     'SELECT id, status FROM registry_services ' +
     'WHERE server_id = ? AND identity_key = ? ' +
@@ -128,12 +134,15 @@ function createServiceRegistry(db) {
 
     const item = normalizeObservation(raw, serverId);
     let existing = null;
+    let confirmedAlias = false;
 
     // Once a reliable identity is known, multiple endpoints may share a service.
     // The current keys are only provisional, so a scanner may request a new
     // episode on a known absence, reboot or conflicting attribution.
     if (!startNewEpisode && item.identityKey) {
-      existing = findIdentity.get(item.serverId, item.identityKey);
+      existing = findAlias.get(item.serverId, item.source, 'process', item.identityKey);
+      confirmedAlias = Boolean(existing);
+      if (!existing) existing = findIdentity.get(item.serverId, item.identityKey);
     } else if (!startNewEpisode && !item.identityKey) {
       existing = findWeakEndpoint.get(
         item.serverId, item.hostIp, item.hostPort, item.protocol,
@@ -142,8 +151,12 @@ function createServiceRegistry(db) {
     }
 
     // Without logical evidence, preserve the old conservative episode split.
-    if (existing?.status === 'offline' && item.source !== 'docker' && !item.logicalKey) {
+    if (existing?.status === 'offline' && item.source !== 'docker' &&
+        !item.logicalKey && !confirmedAlias) {
       existing = null;
+    }
+    if (!existing && item.logicalKey && !startNewEpisode) {
+      existing = findAlias.get(item.serverId, item.source, 'logical', item.logicalKey);
     }
     if (!existing && item.logicalKey) {
       const candidates = findLogicalCandidates.all(item.serverId, item.source, item.logicalKey);
@@ -469,6 +482,8 @@ function createServiceRegistry(db) {
     return forgetOne(id);
   }
 
+  const mergeServices = createServiceMerger(db, getService);
+
   function markStale(serverId = 'local') {
     if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
     return db.prepare(
@@ -565,6 +580,7 @@ function createServiceRegistry(db) {
     setServiceAppearance,
     setGroupAppearance,
     forgetService,
+    mergeServices,
     setPinned,
     linkDockerProxies: sourceLinks.linkListening,
     markStale,

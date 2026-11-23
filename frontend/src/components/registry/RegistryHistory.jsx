@@ -13,6 +13,7 @@ import {
   scanRegistryNow,
   setRegistryServicePinned,
   forgetRegistryService,
+  mergeRegistryServices,
 } from "../../lib/api/serviceRegistry";
 import {
   PAGE_SIZE, parseRegistryPortPrefix, registryPageCount,
@@ -57,6 +58,13 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
   const [scanError, setScanError] = useState("");
   const [pinBusyId, setPinBusyId] = useState(null);
   const [pinError, setPinError] = useState("");
+  const [mergeOpen, setMergeOpen] = useState(false);
+  const [mergeQuery, setMergeQuery] = useState("");
+  const [mergeChoices, setMergeChoices] = useState([]);
+  const [mergeSourceId, setMergeSourceId] = useState("");
+  const [mergeLoading, setMergeLoading] = useState(false);
+  const [mergeBusy, setMergeBusy] = useState(false);
+  const [mergeError, setMergeError] = useState("");
 
   useEffect(() => {
     const timer = setTimeout(() => { setPage(0); setSearch(query.trim()); }, 300);
@@ -67,6 +75,59 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
     const timer = setInterval(() => setVersion(value => value + 1), 30000);
     return () => clearInterval(timer);
   }, []);
+
+  const mergeTarget = data.items.find(item => item.id === selectedId);
+  useEffect(() => {
+    if (!mergeOpen || !mergeTarget) return;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setMergeLoading(true);
+      const term = mergeQuery.trim();
+      const portSearch = /^\\d+$/.test(term) ? parseRegistryPortPrefix(term) : null;
+      getRegistryServices({
+        serverId: mergeTarget.serverId, source: mergeTarget.source, limit: 100,
+        ...(portSearch ? { portPrefix: portSearch } : { search: term }),
+      }, controller.signal).then(result => {
+        if (!controller.signal.aborted) {
+          setMergeChoices(result.items.filter(item => item.id !== mergeTarget.id));
+          setMergeLoading(false);
+        }
+      }).catch(error => {
+        if (!controller.signal.aborted) {
+          setMergeError(error.message || "Unable to find merge candidates");
+          setMergeLoading(false);
+        }
+      });
+    }, 200);
+    return () => { clearTimeout(timer); controller.abort(); };
+  }, [mergeOpen, mergeQuery, mergeTarget?.id, mergeTarget?.source, mergeTarget?.serverId]);
+
+  const openMerge = () => {
+    setMergeQuery("");
+    setMergeSourceId("");
+    setMergeChoices([]);
+    setMergeError("");
+    setMergeOpen(true);
+  };
+
+  const handleMerge = async () => {
+    if (!mergeTarget || !mergeSourceId || mergeBusy) return;
+    setMergeBusy(true);
+    setMergeError("");
+    savedScrollRef.current = rememberScrollContainers(historyRef.current);
+    try {
+      const updated = await mergeRegistryServices(mergeTarget.id, mergeSourceId);
+      setDetail(updated);
+      setMergeOpen(false);
+      setMergeSourceId("");
+      refresh();
+    } catch (error) {
+      savedScrollRef.current = null;
+      setMergeError(error.message || "Unable to merge saved services");
+    } finally {
+      setMergeBusy(false);
+    }
+  };
 
   const parsedPort = parseRegistryPortPrefix(portText);
   const invalidPort = Boolean(portText.trim()) && parsedPort === null;
@@ -309,7 +370,7 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
                 setSelectedId(previous => previous === id ? null : id);
               }}
               onPinToggle={handlePinToggle}
-              onForget={() => setForgetDialogOpen(true)}
+              onForget={() => setForgetDialogOpen(true)} onMerge={openMerge}
               onClose={() => { setSelectedId(null); setForgetDialogOpen(false); }} />
 
           ))}
@@ -325,6 +386,60 @@ export function RegistryHistory({ pinnedOnly = false, onBrowseHistory = null }) 
             onClick={() => setPage(value => value + 1)}>Next</button>
         </nav>
       )}
+
+      <Dialog open={mergeOpen} onOpenChange={open => { if (!mergeBusy) setMergeOpen(open); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Merge saved services</DialogTitle>
+            <DialogDescription>
+              Combine another {mergeTarget?.source || "same-source"} entry into
+              <strong> {mergeTarget?.displayName || "the selected service"}</strong>.
+              The selected service keeps its ID. Ports, history and pins are retained.
+              This cannot be undone. Conflicting saved names, icons, notes or commands
+              must be resolved before merging. Cross-source merges are not supported.
+            </DialogDescription>
+          </DialogHeader>
+          <label className="block space-y-1 text-sm">
+            <span>Find another service by name or port</span>
+            <input value={mergeQuery} maxLength={100}
+              onChange={event => { setMergeQuery(event.target.value); setMergeSourceId(""); setMergeError(""); }}
+              placeholder="e.g. opencode or 49374" className={FIELD_CLASS + " w-full"}
+              aria-label="Search for a service to merge" />
+          </label>
+          <div role="radiogroup" aria-label="Service to merge"
+            className="max-h-64 space-y-2 overflow-y-auto">
+            {mergeLoading && <p role="status" className="text-sm text-slate-500">Finding services…</p>}
+            {!mergeLoading && mergeChoices.length === 0 && (
+              <p className="text-sm text-slate-500">No matching services from the same source.</p>
+            )}
+            {!mergeLoading && mergeChoices.map(candidate => (
+              <label key={candidate.id}
+                className="flex cursor-pointer items-start gap-3 rounded-lg border border-slate-300 dark:border-slate-700 p-3 text-sm hover:bg-slate-50 dark:hover:bg-slate-800">
+                <input type="radio" name="merge-source" value={candidate.id}
+                  checked={mergeSourceId === candidate.id}
+                  onChange={() => setMergeSourceId(candidate.id)} />
+                <span className="min-w-0">
+                  <span className="block font-medium">{candidate.displayName}</span>
+                  <span className="block text-slate-600 dark:text-slate-300">
+                    {candidate.previewHostIp}:{candidate.previewPort} · {candidate.status}
+                    {candidate.pinned ? " · pinned" : ""}
+                  </span>
+                </span>
+              </label>
+            ))}
+          </div>
+          {mergeError && <p role="alert" className="text-sm text-red-600">{mergeError}</p>}
+          <DialogFooter>
+            <button type="button" disabled={mergeBusy} onClick={() => setMergeOpen(false)}
+              className={FIELD_CLASS}>Cancel</button>
+            <button type="button" disabled={!mergeSourceId || mergeBusy || mergeLoading}
+              onClick={handleMerge}
+              className="rounded-lg bg-indigo-700 px-3 py-2 text-sm text-white disabled:opacity-50">
+              {mergeBusy ? "Merging…" : "Confirm merge"}
+            </button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={forgetDialogOpen} onOpenChange={open => {
         if (!forgetting) setForgetDialogOpen(open);

@@ -11,7 +11,7 @@ import {
 
 export function RegistryHistoryCard({
   service, selected, detail, detailError, pinBusy, forgetting,
-  onSelect, onPinToggle, onForget, onClose,
+  onSelect, onPinToggle, onForget, onMerge, onClose,
 }) {
   const expanded = selected === service.id;
   const sources = service.sources || [service.source];
@@ -64,7 +64,7 @@ export function RegistryHistoryCard({
           )}
           <RegistryHistoryActions service={service} expanded={expanded}
             pinBusy={pinBusy} forgetting={forgetting} onPinToggle={onPinToggle}
-            onForget={onForget} onClose={onClose} />
+            onForget={onForget} onMerge={onMerge} onClose={onClose} />
         </div>
       </div>
       {expanded && (

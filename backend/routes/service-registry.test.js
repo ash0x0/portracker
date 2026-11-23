@@ -473,3 +473,53 @@ describe('authenticated appearance PATCH API', () => {
         '/appearance', { name: 'Not a Compose group', revision: 0 })).status).toBe(400);
     }, true));
 });
+
+describe('explicit merge API security and behavior', () => {
+  test('only authenticated same-origin clients can merge two entries', async () =>
+    withServer(async ({ registry, url }) => {
+      const a = registry.observe({
+        source: 'system', host_ip: '127.0.0.1', host_port: 4096,
+        protocol: 'tcp', owner: 'opencode', pid: 101,
+      });
+      const b = registry.observe({
+        source: 'system', host_ip: '127.0.0.1', host_port: 49374,
+        protocol: 'tcp', owner: 'opencode', pid: 202,
+      });
+      const endpoint = url + '/' + a.id + '/merge';
+      const post = (body, origin = new URL(url).origin) => fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify(body),
+      });
+      process.env.ENABLE_AUTH = 'false';
+      expect((await post({ sourceId: b.id })).status).toBe(403);
+      process.env.ENABLE_AUTH = 'true';
+      expect((await post({ sourceId: b.id })).status).toBe(401);
+      expect(registry.listServices().total).toBe(2);
+    }));
+
+  test('authenticated merge rejects cross-origin and invalid selections', async () =>
+    withServer(async ({ registry, url }) => {
+      process.env.ENABLE_AUTH = 'true';
+      const a = registry.observe({
+        source: 'system', host_ip: '127.0.0.1', host_port: 4096,
+        protocol: 'tcp', owner: 'opencode', pid: 101,
+      });
+      const b = registry.observe({
+        source: 'system', host_ip: '127.0.0.1', host_port: 49374,
+        protocol: 'tcp', owner: 'opencode', pid: 202,
+      });
+      const endpoint = url + '/' + a.id + '/merge';
+      const post = (body, origin = new URL(url).origin) => fetch(endpoint, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', Origin: origin },
+        body: JSON.stringify(body),
+      });
+      expect((await post({ sourceId: b.id }, 'https://evil.example')).status).toBe(403);
+      expect((await post({ sourceId: a.id })).status).toBe(400);
+      expect((await post({ sourceId: 'missing' })).status).toBe(404);
+      const result = await post({ sourceId: b.id });
+      expect(result.status).toBe(200);
+      expect((await result.json()).endpoints.map(e => e.hostPort).sort())
+        .toEqual([4096, 49374]);
+      expect((await (await fetch(url)).json()).total).toBe(1);
+    }, true));
+});

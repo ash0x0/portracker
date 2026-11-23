@@ -101,3 +101,11 @@ export function uploadRegistryCustomIcon(file) {
     body: file,
   });
 }
+
+export function mergeRegistryServices(targetId, sourceId) {
+  return request(`${BASE}/${encodeURIComponent(targetId)}/merge`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ sourceId }),
+  });
+}

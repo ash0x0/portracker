@@ -66,7 +66,7 @@ function variantPng(i, extraLength = 7) {
 describe('secure uploaded registry icons (schema v12)', () => {
   test('validates small PNG, JPEG, WebP and ICO; deduplicates exact bytes', () =>
     fixture(({ db, icons }) => {
-      expect(db.prepare('SELECT MAX(version) AS n FROM registry_schema_versions').get().n).toBe(12);
+      expect(db.prepare('SELECT MAX(version) AS n FROM registry_schema_versions').get().n).toBe(13);
       for (const [bytes, mime] of [[PNG, 'image/png'], [JPEG, 'image/jpeg'],
         [WEBP, 'image/webp'], [ICO, 'image/vnd.microsoft.icon']]) {
         expect(validateImage(bytes, mime)).toBe(
@@ -78,7 +78,7 @@ describe('secure uploaded registry icons (schema v12)', () => {
       }
       expect(icons.stats().count).toBe(4);
       createServiceRegistry(db);
-      expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(12);
+      expect(db.prepare('SELECT COUNT(*) AS n FROM registry_schema_versions').get().n).toBe(13);
     }));
 
   test('rejects spoofed MIME, SVG, HTML, truncation, corrupt PNG and unsupported content', () =>
