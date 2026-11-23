@@ -11,6 +11,7 @@ import {
 } from "../../lib/api/serviceRegistry";
 import { PAGE_SIZE, parseRegistryPortPrefix, registryPageCount } from "../../lib/registry-utils.mjs";
 import { RegistryPinnedGroup } from "./RegistryPinnedGroup";
+import { RegistryMergeDialog } from "./RegistryMergeDialog";
 
 const FIELD = "rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 px-3 py-2 text-sm";
 
@@ -71,6 +72,8 @@ export function RegistryPinned({ onBrowseHistory }) {
   const [pinError, setPinError] = useState("");
   const [forgetting, setForgetting] = useState(false);
   const [forgetDialogOpen, setForgetDialogOpen] = useState(false);
+  const [forgetTargetId, setForgetTargetId] = useState(null);
+  const [mergeOpen, setMergeOpen] = useState(false);
   const [editor, setEditor] = useState(null);
   const editorRef = useRef(null);
   const editorTrigger = useRef(null);
@@ -308,21 +311,22 @@ export function RegistryPinned({ onBrowseHistory }) {
   };
 
   const handleForget = async () => {
-    if (!selectedId || forgetting) return;
+    if (!forgetTargetId || forgetting) return;
     setForgetting(true);
     setDetailError("");
     savedScroll.current = scrollSnapshot(root.current);
     try {
-      await forgetRegistryService(selectedId);
+      await forgetRegistryService(forgetTargetId);
       setRetainedGroup(null);
       const group = data.items.find(item =>
-        item.services.some(member => member.id === selectedId));
-      const next = group?.services.find(member => member.id !== selectedId);
-      setData(previous => withoutPinnedService(previous, selectedId));
-      setSelectedId(next?.id || null);
-      if (!next) setExpandedGroupId(null);
-      setDetail(null);
+        item.services.some(member => member.id === forgetTargetId));
+      const next = group?.services.find(member => member.id !== forgetTargetId);
+      setData(previous => withoutPinnedService(previous, forgetTargetId));
+      setSelectedId(previous => previous === forgetTargetId ? (next?.id || null) : previous);
+      if (!next) setExpandedGroupId(previous => previous === group?.id ? null : previous);
+      setDetail(previous => previous?.id === forgetTargetId ? null : previous);
       setForgetDialogOpen(false);
+      setForgetTargetId(null);
       if (data.items.length === 1 && data.items[0].services.length === 1 && page > 0) {
         setPage(value => Math.max(0, value - 1));
       } else {
@@ -352,6 +356,8 @@ export function RegistryPinned({ onBrowseHistory }) {
     }
   };
 
+  const mergeTarget = data.items.flatMap(group => group.services)
+    .find(service => service.id === selectedId);
   const pages = registryPageCount(data.total);
   const visibleItems = retainedGroup
     ? [retainedGroup.group, ...data.items.filter(group => group.id !== retainedGroup.id)]
@@ -476,7 +482,8 @@ export function RegistryPinned({ onBrowseHistory }) {
                 detail={detail} detailError={detailError}
                 onToggle={toggleGroup} onSelect={setSelectedId}
                 onPinToggle={handleUnpin}
-                onForget={() => setForgetDialogOpen(true)}
+                onForget={service => { setForgetTargetId(service.id); setDetailError(""); setForgetDialogOpen(true); }}
+                 onMerge={() => setMergeOpen(true)}
                 onClose={() => { setExpandedGroupId(null); setSelectedId(null); closeEditor(); }}
                 onEditGroup={editGroup} onEditService={editService}
                 editor={editor?.groupId === group.id ? editor : null}
@@ -499,14 +506,25 @@ export function RegistryPinned({ onBrowseHistory }) {
           </button>
         </nav>
       )}
+      {mergeOpen && mergeTarget && (
+        <RegistryMergeDialog target={mergeTarget}
+          onClose={() => setMergeOpen(false)}
+          onMerged={updated => {
+            savedScroll.current = scrollSnapshot(root.current);
+            setDetail(updated);
+            setMergeOpen(false);
+            setRetainedGroup(null);
+            refresh();
+          }} />
+      )}
       <Dialog open={forgetDialogOpen} onOpenChange={open => {
         if (!forgetting) setForgetDialogOpen(open);
       }}>
-        <DialogContent onCloseAutoFocus={event => { if (!selectedId) event.preventDefault(); }}>
+        <DialogContent>
           <DialogHeader>
             <DialogTitle>Forget saved service?</DialogTitle>
             <DialogDescription>
-              Forget {detail?.displayName || "this service"}? This removes only its own saved
+              Forget {data.items.flatMap(group => group.services).find(service => service.id === forgetTargetId)?.displayName || "this service"}? This removes only its own saved
               history, pins, and recovery notes. It does not stop any running process
               or delete other services in the group.
             </DialogDescription>
