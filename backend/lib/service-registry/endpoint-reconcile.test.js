@@ -1,6 +1,9 @@
 'use strict';
 
 const Database = require('better-sqlite3');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { describe, test, expect } = require('@jest/globals');
 const { createServiceRegistry } = require('./registry');
 const { createRecoveryNotesStore } = require('./recovery-notes');
@@ -117,4 +120,46 @@ describe('same-port reboot reconciliation', () => {
       expect(registry.listServices().total).toBe(2);
       expect(registry.listServices({ status: 'offline' }).total).toBe(0);
     }));
+  test('reopened SQLite database reconciles a new PID and a new host boot ID', () => {
+    const folder = fs.mkdtempSync(path.join(os.tmpdir(), 'portracker-reboot-'));
+    const filename = path.join(folder, 'history.sqlite');
+    try {
+      const before = new Database(filename);
+      const first = createServiceRegistry(before);
+      first.reconcileSource({ source: 'system', complete: true, at: 1000,
+        rows: [port('opencode', 101)] });
+      const originalId = first.listServices().items[0].id;
+      first.setPinned(originalId, true, 1100);
+      before.close();
+
+      const after = new Database(filename);
+      try {
+        const registry = createServiceRegistry(after);
+        registry.markStale('local');
+        registry.reconcileSource({ source: 'system', complete: true, at: 2000,
+          rows: [{ ...port('opencode', 202),
+            boot_id: 'fedcba98-7654-3210-fedc-ba9876543210' }] });
+        expect(registry.listServices().total).toBe(1);
+        expect(registry.getService(originalId)).toMatchObject({
+          pinned: true, status: 'listening', runCount: 2,
+          firstSeenAt: 1000, lastSeenAt: 2000,
+        });
+      } finally { after.close(); }
+    } finally { fs.rmSync(folder, { recursive: true, force: true }); }
+  });
+
+  test('three plausible services on the same endpoint remain distinct when ambiguous', () =>
+    fixture((_db, registry) => {
+      registry.reconcileSource({ source: 'system', complete: true, at: 1000,
+        rows: [port('opencode', 101)] });
+      registry.reconcileSource({ source: 'system', complete: false, at: 2000,
+        rows: [port('opencode', 202)] });
+      registry.reconcileSource({ source: 'system', complete: false, at: 3000,
+        rows: [port('opencode', 303)] });
+      registry.reconcileSource({ source: 'system', complete: true, at: 4000,
+        rows: [port('opencode', 303)] });
+      expect(registry.listServices().total).toBe(3);
+      expect(registry.listServices({ status: 'listening' }).total).toBe(1);
+    }));
+
 });
