@@ -26,6 +26,10 @@ export function getRegistryServices(filters = {}, signal) {
   return request(`${BASE}?${query.toString()}`, { signal });
 }
 
+export function getRegistryLivePinTargets(signal) {
+  return request(`${BASE}/live-pins`, { signal });
+}
+
 export function getRegistryPinnedGroups(filters = {}, signal) {
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(filters)) {
