@@ -489,6 +489,7 @@ if (!settingsManager.initializeSettingsStorage()) {
 let serviceRegistry = null;
 let registryScanner = null;
 let registryScanEnabled = false;
+let registryScanIntervalMs = 30000;
 let httpMetadataStore = null;
 let customIconStore = null;
 let linuxProvenanceStore = null;
@@ -548,6 +549,7 @@ try {
       captureHostTcp({ collectProvenance: true }) } : {}),
   });
   registryScanEnabled = registryConfig.enabled;
+  registryScanIntervalMs = registryConfig.intervalMs;
 } catch (error) {
   logger.warn('Historical service scanner unavailable:', error.message);
 }
@@ -596,7 +598,8 @@ app.use('/api/auth', authRoutes);
 app.use('/api/settings', requireAuth, settingsRoutes);
 if (serviceRegistry) {
   app.use('/api/service-registry', createRegistryRouter(serviceRegistry, {
-    scanEnabled: registryScanEnabled, scanner: registryScanner, httpStore: httpMetadataStore,
+    scanEnabled: registryScanEnabled, scanIntervalMs: registryScanIntervalMs,
+    scanner: registryScanner, httpStore: httpMetadataStore,
     customIconStore,
     provenanceStore: linuxProvenanceStore,
     dockerProvenanceStore,
