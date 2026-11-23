@@ -14,6 +14,7 @@ import { AppHeader } from "./components/layout/AppHeader";
 import { ServerSection } from "./components/server/ServerSection";
 import { RegistryHistory } from "./components/registry/RegistryHistory";
 import { RegistryPinned } from "./components/registry/RegistryPinned";
+import { LiveRegistryPinProvider } from "./components/registry/LiveRegistryPinButton";
 import { AppSidebarLayout } from "./components/layout/AppSidebarLayout";
 import { Label } from "@/components/ui/label";
 import { MultipleServerSkeleton } from "./components/server/MultipleServerSkeleton";
@@ -2074,6 +2075,7 @@ export default function App() {
                 </div>
               ) : (
                 <div role="tabpanel" aria-label="Live ports view">
+                <LiveRegistryPinProvider>
               {loading && (
                 <MultipleServerSkeleton count={selectedServer ? 1 : 2} />
               )}
@@ -2116,6 +2118,7 @@ export default function App() {
               {!loading && selectedServer && searchTerm && searchScope === "all" && (
                 <div className="space-y-8 animate-in fade-in-0 duration-300">{renderAllMatchingServers()}</div>
               )}
+                </LiveRegistryPinProvider>
                 </div>
               )}
             </div>
