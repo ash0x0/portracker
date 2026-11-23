@@ -84,7 +84,7 @@ export function RegistryPinnedGroup({
           </button>
           <span className="min-w-0 flex-1">
             <span className="flex min-w-0 items-center gap-1">
-              <button type="button" onClick={() => onToggle(group)} aria-expanded={expanded}
+              <button type="button" data-service-list-title onClick={() => onToggle(group)} aria-expanded={expanded}
                 className={SERVICE_CARD_TITLE_CLASS + " min-w-0 truncate text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
                 {group.name}
               </button>
