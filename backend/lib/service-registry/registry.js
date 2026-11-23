@@ -491,13 +491,18 @@ function createServiceRegistry(db) {
 
   const mergeServices = createServiceMerger(db, getService);
 
-  function markStale(serverId = 'local') {
+  const markStale = db.transaction((serverId = 'local') => {
     if (!validServerId(serverId)) throw new TypeError('Invalid server ID');
-    return db.prepare(
+    const changes = db.prepare(
       "UPDATE registry_services SET status = 'unknown' " +
       "WHERE server_id = ? AND status = 'listening'"
     ).run(serverId).changes;
-  }
+    db.prepare(
+      "UPDATE registry_scan_state SET outcome = 'partial', " +
+      "error_code = 'awaiting_first_scan' WHERE server_id = ?"
+    ).run(serverId);
+    return changes;
+  });
 
   const scanRows = db.prepare(
     'SELECT server_id, source, last_attempt_at, last_success_at, outcome, error_code ' +

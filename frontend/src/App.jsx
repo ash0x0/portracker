@@ -713,6 +713,7 @@ export default function App() {
                   platform: scanData.platform,
                   platformName: scanData.platformName,
                   data: transformedPorts,
+                  scannedAt: Date.now(),
                   systemInfo: scanData.systemInfo,
                   vms: scanData.vms,
                   parentId: server.parentId,
@@ -2068,7 +2069,7 @@ export default function App() {
                 </button>
               </nav>
               {activeView === "history" ? (
-                <div role="tabpanel" aria-label="History view"><RegistryHistory /></div>
+                <div role="tabpanel" aria-label="History view"><RegistryHistory liveLocal={groups.find(group => group.id === "local") || null} /></div>
               ) : activeView === "pinned" ? (
                 <div role="tabpanel" aria-label="Pinned services view">
                   <RegistryPinned onBrowseHistory={() => setActiveView("history")} />

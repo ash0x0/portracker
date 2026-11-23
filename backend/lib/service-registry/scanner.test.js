@@ -101,6 +101,13 @@ describe('authoritative source-scoped listener reconciliation', () => {
     registry.markStale();
     expect(registry.listServices({ status: 'unknown' }).total).toBe(1);
     expect(registry.listServices().items[0].lastSeenAt).toBe(1000);
+    expect(registry.getScanStatus()[0]).toMatchObject({
+      outcome: 'partial', errorCode: 'awaiting_first_scan', lastSuccessAt: 1000,
+    });
+    registry.reconcileSource({ source: 'system', complete: true, rows: [system(3000)], at: 2000 });
+    expect(registry.getScanStatus()[0]).toMatchObject({
+      outcome: 'complete', errorCode: null, lastSuccessAt: 2000,
+    });
   }));
 });
 

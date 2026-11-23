@@ -73,6 +73,27 @@ instructions. Clicking **Pin** does **not** restart the process.
   without being forgotten from History. Check narrow/mobile layout and keyboard
   access.
 
+## Comparing the two tabs (issue #91)
+
+Live Ports lists the latest discovery output for the selected server. History
+retains **local** TCP services across restarts and groups multiple endpoints by
+service identity; its collector is separate and has a distinct schedule. The
+lists are not expected to have identical card counts. Live can include UDP,
+internal Docker endpoints and remote servers, while the persisted catalog only
+tracks native listening TCP and Docker-published TCP. Existing Live view filters
+can also hide IPv6 addresses.
+
+History now includes a bounded, read-only **Local TCP inventory comparison**
+against the most recent successful local Live Ports sample. It compares
+*endpoints* using source, bind IP, port and protocol, not names or IDs. The
+tool excludes UDP, internal sockets and remote peers. A source is compared only
+if its latest scan is complete and sufficiently fresh relative to the live
+sample; skipped sources are explicitly listed. Results show differences but
+do not prove services are the same, change saved identities, or alter status.
+Use Scan now after a source recovers, and refresh Live Ports to update the
+other sample. After restart, source scan state is marked incomplete until a
+new scan confirms it.
+
 ## Docker / native host-proxy correlation (schema v10, issue #36)
 
 A Docker-published TCP port may be reported twice: the Docker API identifies the

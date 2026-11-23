@@ -34,6 +34,34 @@ The scanner checks native Linux TCP sockets and Docker-published TCP ports **sep
 
 The collector scans services at fixed, bounded intervals with a small randomized delay. Failed sources back off independently: a broken Docker socket does not slow host scans.
 
+## Why Live Ports and History can disagree
+
+**Live Ports** is the dashboard's latest selected-server discovery output,
+using the configured platform collector (which can include UDP, Docker-internal
+ports, IPv6 filtering, and peers). **History** is the local server's persistent
+logical-service catalog, scanned separately and restricted to host TCP listeners
+and Docker-published TCP bindings. Several ports can belong to one saved service;
+a Docker exposure may be observed by both Docker and the native system.
+Counts of cards are therefore not directly comparable.
+
+The History tab now compares the **current local Live Ports TCP endpoint sample**
+with active Registry endpoints using source + bind IP + port + TCP, without
+claiming those endpoint matches establish application identity. UDP, internal
+Docker ports and remote servers are excluded. Each registry source must have
+a recent *complete* scan; partial, failed, stale and disabled sources are
+excluded rather than reported as offline/missing. The comparison reports
+matched endpoints, endpoints seen only in one inventory, and up to five sample
+differences. Scan times and the expected interval are shown. It is
+diagnostic and never merges services or marks them online.
+
+On backend restart, persisted Listening states become Unknown, and previous
+scan state is flagged `partial (awaiting scan after restart)` until a new
+source scan completes; last-success timestamps remain for diagnostics.
+`Reload list` does not trigger a scan. Use **Scan now** for History, and
+refresh Live Ports separately to obtain comparable recent samples.
+Differences may still reflect collector fallback, bind-address normalization,
+Docker's source grouping, IPv6, or processes that came and went between scans.
+
 ## Docker and NixOS
 
 Portracker inside Docker may have access to the host PID namespace but **not** its host network namespace. For authoritative host-offline transitions, make host `/proc` available read-only and set `HOST_PROC=/host/proc`:
