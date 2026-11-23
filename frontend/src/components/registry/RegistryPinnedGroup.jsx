@@ -1,5 +1,5 @@
 import React from "react";
-import { Pencil, Pin } from "lucide-react";
+import { GitMerge, Pencil, Pin, Trash2 } from "lucide-react";
 import { RegistryAppearanceEditor } from "./RegistryAppearanceEditor";
 import { RegistryServiceIcon } from "./RegistryServiceIcon";
 import { RegistryServiceDetails } from "./RegistryServiceDetails";
@@ -61,7 +61,7 @@ function GroupMemberSelector({ group, selectedId, onSelect, disabled = false }) 
 
 export function RegistryPinnedGroup({
   group, expanded, selectedId, detail, detailError, onToggle, onSelect,
-  onPinToggle, onForget, onClose, onEditGroup, onEditService,
+  onPinToggle, onForget, onMerge, onClose, onEditGroup, onEditService,
   editor, onSaveAppearance, onCancelAppearance, onReloadAppearance,
   pinBusy, forgetting,
 }) {
@@ -72,43 +72,69 @@ export function RegistryPinnedGroup({
     <article data-pinned-group={group.id} data-service-list-surface="pinned"
       className={SERVICE_CARD_CLASS}>
       <div data-service-list-header className={SERVICE_CARD_HEADER_CLASS}>
-      <button type="button" onClick={() => onToggle(group)}
-        aria-expanded={expanded} aria-label={group.name + " service group"}
-        className="flex min-w-0 flex-1 flex-wrap items-center justify-between gap-3 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
-        <span className="flex min-w-0 flex-1 items-center gap-3">
-          <ServiceListChevron expanded={expanded} />
-          <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice} name={group.detectedName || group.name}
-            source={group.sources.includes("docker") ? "docker" : "system"} />
-          <SavedServiceStatusDot status={group.status} />
+        <div className="flex min-w-0 flex-1 flex-wrap items-center gap-3">
+          <button type="button" onClick={() => onToggle(group)}
+            aria-expanded={expanded} aria-label={group.name + " service group"}
+            className="inline-flex shrink-0 items-center gap-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
+            <ServiceListChevron expanded={expanded} />
+            <RegistryServiceIcon iconHash={group.iconHash} iconChoice={group.iconChoice}
+              name={group.detectedName || group.name}
+              source={group.sources.includes("docker") ? "docker" : "system"} />
+            <SavedServiceStatusDot status={group.status} />
+          </button>
           <span className="min-w-0 flex-1">
-            <span data-service-list-title className={SERVICE_CARD_TITLE_CLASS + " block truncate"}>{group.name}</span>
+            <span className="flex min-w-0 items-center gap-1">
+              <button type="button" data-service-list-title onClick={() => onToggle(group)}
+                aria-expanded={expanded} aria-label={"Toggle group details for " + group.name}
+                className={SERVICE_CARD_TITLE_CLASS + " min-w-0 truncate text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500"}>
+                {group.name}
+              </button>
+              {expanded && (
+                <button type="button" disabled={Boolean(editor)} onClick={() => onEditGroup(group)}
+                  title={group.kind === "compose" ? "Edit Compose project appearance" : "Edit appearance"}
+                  aria-label={group.kind === "compose" ? "Edit Compose project appearance" : "Edit appearance"}
+                  className="inline-flex shrink-0 items-center justify-center rounded-lg border border-slate-300 p-1.5 text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-200 dark:hover:bg-slate-700">
+                  <Pencil className="h-4 w-4" aria-hidden="true" />
+                </button>
+              )}
+            </span>
             <SourceIndicator group={group} />
           </span>
           <Pin className="h-3.5 w-3.5 shrink-0 text-indigo-400" aria-hidden="true" />
-        </span>
-        <span className="flex min-w-0 flex-wrap items-center gap-2">
-          {group.ports.slice(0, 5).map(item =>
-            <PortChip key={item.protocol + ":" + item.port} item={item} />)}
-          {group.ports.length > 5 && (
-            <span className={SERVICE_CARD_META_CLASS}>+{group.ports.length - 5} more</span>
+          <button type="button" onClick={() => onToggle(group)} aria-expanded={expanded}
+            className="flex min-w-0 flex-wrap items-center gap-2 text-left focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500">
+            {group.ports.slice(0, 5).map(item =>
+              <PortChip key={item.protocol + ":" + item.port} item={item} />)}
+            {group.ports.length > 5 && (
+              <span className={SERVICE_CARD_META_CLASS}>+{group.ports.length - 5} more</span>
+            )}
+          </button>
+        </div>
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {linkEndpoint && <OpenPortLink port={linkEndpoint.port} protocol={linkEndpoint.protocol}
+            httpRootUrl={group.services.find(service => linkEndpoint.serviceIds?.includes(service.id))?.httpRootUrl}
+            internal={linkEndpoint.internal} offline={!linkEndpoint.active} showPort />}
+          {expanded && selected && (
+            <button type="button" disabled={Boolean(editor) || forgetting}
+              onClick={() => onMerge(selected)}
+              aria-label={"Merge another service into " + selected.displayName}
+              title={"Merge another service into " + selected.displayName}
+              className="inline-flex items-center justify-center rounded-lg border border-slate-300 px-2.5 py-2 text-slate-800 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700">
+              <GitMerge className="h-4 w-4" aria-hidden="true" />
+            </button>
           )}
-        </span>
-      </button>
-      {linkEndpoint && <OpenPortLink port={linkEndpoint.port} protocol={linkEndpoint.protocol}
-        httpRootUrl={group.services.find(service => linkEndpoint.serviceIds?.includes(service.id))?.httpRootUrl}
-        internal={linkEndpoint.internal} offline={!linkEndpoint.active} showPort />}
+          {group.services.length === 1 && (
+            <button type="button" disabled={forgetting} onClick={() => onForget(group.services[0])}
+              aria-label={"Forget " + group.services[0].displayName}
+              title={"Forget " + group.services[0].displayName}
+              className="inline-flex items-center justify-center rounded-lg border border-red-300 px-2.5 py-2 text-red-700 hover:bg-red-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-red-500 disabled:opacity-50 dark:text-red-300 dark:hover:bg-red-950">
+              <Trash2 className="h-4 w-4" aria-hidden="true" />
+            </button>
+          )}
+        </div>
       </div>
       {expanded && (
         <div className={SERVICE_CARD_BODY_CLASS + " min-w-0 space-y-4 p-4"}>
-          <div className="flex flex-wrap justify-end gap-2">
-            <button type="button" disabled={Boolean(editor)} onClick={() => onEditGroup(group)}
-              aria-label={group.kind === "compose"
-                ? "Edit Compose project appearance" : "Edit appearance"}
-              className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-indigo-500 disabled:opacity-50 dark:border-slate-600 dark:text-slate-100 dark:hover:bg-slate-700">
-              <Pencil className="h-4 w-4" aria-hidden="true" />
-              {group.kind === "compose" ? "Edit project appearance" : "Edit appearance"}
-            </button>
-          </div>
           {editor && (
             <RegistryAppearanceEditor key={editor.scope + ":" + editor.id}
               item={editor.item} scope={editor.scope}
@@ -134,7 +160,7 @@ export function RegistryPinnedGroup({
               detail={detail?.id === selected.id ? detail : null}
               detailError={detailError}
               onPinToggle={onPinToggle}
-              onForget={onForget}
+              onForget={() => onForget(selected)}
               onClose={onClose}
               pinBusy={pinBusy}
               forgetting={forgetting}

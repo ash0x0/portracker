@@ -24,9 +24,9 @@ export async function phaseCContracts(context, options) {
     await assertRegistryReloadBehavior(page, '/api/service-registry/pinned-groups');
     assert.equal(await page.locator('[data-pinned-group]').count(), 1,
       'Two verified Compose services should produce one project row');
-    assert.equal(await group.getByText('54321', { exact: true }).count(), 1,
+    assert.equal(await group.locator('xpath=ancestor::article[1]').getByText('54321', { exact: true }).count(), 1,
       'One pinned service displays all current and remembered ports');
-    assert.equal(await group.getByText('+2 more').count(), 1,
+    assert.equal(await group.locator('xpath=ancestor::article[1]').getByText('+2 more').count(), 1,
       'Additional port chips should be accessible after expansion');
     assert.equal(await page.getByRole('button', { name: 'Unpin selected service' }).count(), 0,
       'Collapsed row must not have an Unpin button');

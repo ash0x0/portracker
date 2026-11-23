@@ -170,6 +170,23 @@ function createRegistryRequestHandler(records, recoveryNotes, recoveryStarts, gr
       recoveryStarts.set(id, preferred);
       return json({ preferred });
     }
+    if (req.method() === 'POST' && suffix.endsWith('/merge')) {
+      const targetId = decodeURIComponent(suffix.slice(1, -'/merge'.length));
+      const target = records.find(row => row.id === targetId);
+      const source = records.find(row => row.id === req.postDataJSON()?.sourceId);
+      if (!target || !source) return json({ error: 'Saved service not found' }, 404);
+      if (target.id === source.id || target.source !== source.source) {
+        return json({ error: 'Incompatible merge' }, 409);
+      }
+      target.pinned ||= source.pinned;
+      target.endpointCount += source.endpointCount;
+      records.splice(records.indexOf(source), 1);
+      return json({ ...target, endpoints: fixtureEndpoints(target).map(endpoint => ({
+        id: endpoint.id, source: endpoint.source, hostIp: endpoint.host_ip,
+        hostPort: endpoint.host_port, protocol: endpoint.protocol,
+        lastSeenAt: endpoint.last_seen_at,
+      })) });
+    }
     if (suffix && suffix !== '/') {
       const id = decodeURIComponent(suffix.slice(1));
       const item = records.find(row => row.id === id);
